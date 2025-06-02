@@ -1,0 +1,3 @@
+Requirement 1.1.2: Review firewall and router rule sets at least every six months.
+Requirement 3.2.1: Do not store sensitive authentication data after authorization.
+Requirement 12.5.1: Assign to an individual or team the overall responsibility for PCI DSS compliance.
