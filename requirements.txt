@@ -1,0 +1,7 @@
+openai
+jinja2
+faiss-cpu
+fastapi
+uvicorn
+pydantic
+requests

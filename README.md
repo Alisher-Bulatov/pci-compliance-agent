@@ -1,2 +1,3 @@
-# pci-compliance-agent
-PCI compliance agent
+# PCI DSS Compliance Agent
+
+This project is a document-aware assistant to help with PCI DSS compliance.
