@@ -12,4 +12,13 @@ class PCIDocumentRetriever:
     def retrieve(self, query, k=3):
         query_vec = self.embedder.encode([query])
         D, I = self.index.search(np.array(query_vec).astype("float32"), k)
-        return [self.mapping[i] for i in I[0]]
+        results = []
+
+        for idx in I[0]:
+            if idx == -1:
+                continue
+            doc = self.mapping.get(idx)
+            if doc:
+                results.append(doc)
+
+        return results
