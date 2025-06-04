@@ -1,6 +1,9 @@
 import pickle
+from pathlib import Path
 
-with open("data/mapping.pkl", "rb") as f:
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+with open(DATA_DIR / "mapping.pkl", "rb") as f:
     requirement_map = pickle.load(f)
 
 def get_requirement_text(requirement_id: str) -> str:
