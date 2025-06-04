@@ -1,0 +1,18 @@
+You previously invoked a TOOL_CALL. Here is the result of that operation:
+
+→ Tool Result:
+{tool_result}
+
+Now, based on this result, provide a concise and helpful response to the user's original request.
+
+📌 Guidelines:
+- Respond directly and clearly using only the result provided.
+- Do not generate any new TOOL_CALLs.
+- Do not suggest further actions unless explicitly asked.
+- Do not repeat the tool result verbatim—explain or summarize it naturally.
+- Assume the user is expecting a final answer unless clarification was requested.
+
+User Input:
+{user_input}
+
+Response:
