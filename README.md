@@ -5,7 +5,8 @@ It uses a Retrieval-Augmented Generation (RAG) pipeline and modular tool executi
 
 ---
 
-🔧 Key Components
+## 🔧 Key Components
+
 FAISS Retriever
 Uses pci_chunks.txt and a prebuilt index (pci_index.faiss) to locate relevant content from PCI DSS documentation.
 
