@@ -5,6 +5,21 @@ It uses a Retrieval-Augmented Generation (RAG) pipeline and modular tool executi
 
 ---
 
+🔧 Key Components
+FAISS Retriever
+Uses pci_chunks.txt and a prebuilt index (pci_index.faiss) to locate relevant content from PCI DSS documentation.
+
+LLM Agent
+Uses structured prompts to decide when to call tools or answer directly. Supports both reasoning and execution steps.
+
+MCP Server
+A FastAPI service that executes tools like get_requirement_text, search_by_topic, or compare_requirements.
+
+CLI Chat Interface
+Run main.py to start a conversation. You’ll get responses, tool calls, and updates interactively.
+
+---
+
 ## 🔧 Project Structure
 
 ```
@@ -96,9 +111,18 @@ Try these in the CLI:
 ```text
 hello
 What does 3.2.1 say?
-Can you compare 1.1.2 and 12.5.1?
-Search for authentication requirements
+Can you show me the wording of requirement 1.1.2?
+Compare requirements 1.1.2 and 12.5.1
+Help me understand encryption requirements
+What should I consider for secure design?
+What about segmentation boundaries?
+Is 3.2.1 about sensitive data?
+I already know 3.2.1 is about not storing sensitive auth data, but what else should I know?
 ```
 
 ---
 
+📜 License
+None
+
+---
