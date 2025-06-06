@@ -1,61 +1,54 @@
 # 🛡️ PCI DSS Compliance Agent
 
 This project is a document-aware assistant for PCI DSS compliance.  
-It uses a Retrieval-Augmented Generation (RAG) pipeline and modular tool execution to answer questions about PCI DSS requirements in a helpful, transparent, and interactive way.
+It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool execution to help users understand and interact with PCI DSS requirements in a transparent and intelligent way.
 
 ---
 
 ## 🔧 Key Components
 
-FAISS Retriever
-Uses pci_chunks.txt and a prebuilt index (pci_index.faiss) to locate relevant content from PCI DSS documentation.
+- **FAISS Retriever**:  
+  Uses `pci_chunks.txt` and a prebuilt FAISS index (`pci_index.faiss`) to locate relevant content from PCI DSS documentation.
 
-LLM Agent
-Uses structured prompts to decide when to call tools or answer directly. Supports both reasoning and execution steps.
+- **LLM Agent**:  
+  Leverages structured prompts to determine whether to respond directly or call a tool. Enables reasoning and step-by-step execution.
 
-MCP Server
-A FastAPI service that executes tools like get_requirement_text, search_by_topic, or compare_requirements.
+- **MCP Server (Modular Command Processor)**:  
+  A FastAPI-based service that handles backend execution of tools such as `get_requirement_text`, `search_by_topic`, and `compare_requirements`.
 
-CLI Chat Interface
-Run main.py to start a conversation. You’ll get responses, tool calls, and updates interactively.
+- **CLI Chat Interface**:  
+  Launch via `cli.py` to start an interactive, conversational session with the assistant.
 
 ---
 
-## 🔧 Project Structure
+## 🗂️ Project Structure
 
 ```
 .
-├── agent/                # Core LLM wrapper, prompt logic, tool call parser
+├── agent/                # LLM logic, prompt templates, and tool call parser
 │   ├── llm_wrapper.py
 │   ├── prompt_formatter.py
 │   ├── tool_call_parser.py
-│   └── *.txt             # Prompt templates and followup format
-
-├── cli.py               # CLI-based chat interface (entry point)
-
-├── data/                # Vector index and document mappings
+│   └── *.txt             # Prompt templates and followup formats
+├── cli.py                # CLI entry point
+├── data/                 # Vector index and document chunks
 │   ├── pci_chunks.txt
 │   ├── pci_index.faiss
 │   └── mapping.pkl
-
-├── mcp_server/          # FastAPI server for executing tools
+├── mcp_server/           # FastAPI backend for tool execution
 │   ├── main.py
 │   ├── pipeline.py
 │   ├── router.py
 │   └── tool_dispatcher.py
-
-├── retrieval/           # FAISS-based semantic retriever
+├── retrieval/            # FAISS retriever wrapper
 │   └── retriever.py
-
-├── scripts/             # Index build and setup utilities
+├── scripts/              # One-time setup scripts
 │   └── build_index.py
-
-├── tools/               # Tool implementations
+├── tools/                # Tool definitions
 │   ├── get_requirement_text.py
 │   ├── search_by_topic.py
 │   ├── compare_requirements.py
 │   └── recommend_tool.py
-
 ├── requirements.txt
 └── README.md
 ```
@@ -64,50 +57,54 @@ Run main.py to start a conversation. You’ll get responses, tool calls, and upd
 
 ## 🚀 How to Run
 
-1. Install dependencies:
+1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-2. Start the tool server (in another terminal):
+2. **Start the tool server** (in a separate terminal):
    ```bash
    uvicorn mcp_server.main:app --reload
    ```
 
-3. Run the CLI interface:
+3. **Run the CLI interface**:
    ```bash
    python cli.py
    ```
 
-4. Type `exit` or `quit` to end the session.
+4. **Exit** with:
+   ```text
+   exit
+   quit
+   ```
 
 ---
 
 ## 🧠 Assistant Capabilities
 
-The agent uses LLM reasoning to:
+The agent uses structured LLM reasoning to:
 
-- Answer questions about PCI DSS requirement texts
-- Search for relevant topics using embeddings
-- Compare multiple requirements
-- Recommend appropriate tools when user intent is ambiguous
+- Retrieve the exact text of PCI DSS requirements by ID
+- Perform semantic searches for relevant topics (e.g., "firewalls", "encryption")
+- Compare multiple requirements to highlight differences
+- Suggest which tool to use based on vague queries
 
-All logic follows a strict tool-call discipline.
+All logic is built around explicit tool calls and reproducible outputs.
 
-### ✅ Current Supported Tools
+### ✅ Available Tools
 
 | Tool Name              | Description |
 |------------------------|-------------|
-| `get_requirement_text` | Retrieves exact text of a specific requirement (e.g., 3.2.1) |
-| `search_by_topic`      | Retrieves top relevant requirements for a topic (e.g., encryption, firewalls) |
-| `compare_requirements` | Compares the full text of two or more requirement IDs |
-| `recommend_tool`       | Suggests the best tool to use when the user input is vague or exploratory |
+| `get_requirement_text` | Retrieves the full text of a specific requirement (e.g., `3.2.1`) |
+| `search_by_topic`      | Finds top requirements related to a keyword/topic |
+| `compare_requirements` | Compares full text of multiple requirement IDs |
+| `recommend_tool`       | Infers the best tool to use for ambiguous queries |
 
 ---
 
 ## 🔍 Sample Prompts
 
-Try these in the CLI:
+Try these inside the CLI:
 
 ```text
 hello
@@ -123,7 +120,8 @@ I already know 3.2.1 is about not storing sensitive auth data, but what else sho
 
 ---
 
-📜 License
+## 📜 License
+
 None
 
 ---
