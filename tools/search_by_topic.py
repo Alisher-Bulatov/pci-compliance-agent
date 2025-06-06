@@ -6,9 +6,8 @@ from sentence_transformers import SentenceTransformer
 INDEX_PATH = "data/pci_index.faiss"
 MAPPING_PATH = "data/mapping.pkl"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-TOP_K = 10  # Get more candidates for better reranking
+TOP_K = 10
 
-# Simple tag extraction
 def extract_query_tags(query):
     lowered = query.lower()
     tags = []
@@ -24,7 +23,7 @@ def extract_query_tags(query):
         tags.append("compliance")
     return tags
 
-def search_by_topic(query):
+def main(query):
     index = faiss.read_index(INDEX_PATH)
     with open(MAPPING_PATH, "rb") as f:
         mapping = pickle.load(f)
@@ -44,22 +43,13 @@ def search_by_topic(query):
         overlap_score = len(entry_tags & query_tags)
         candidates.append((entry, overlap_score))
 
-    # Sort: first by tag overlap, then fallback to embedding proximity
     candidates.sort(key=lambda x: x[1], reverse=True)
 
-    # Return as structured list (for MCP or rerouting)
     return [
         {
             "id": entry["id"],
             "text": entry["text"],
             "tags": entry["tags"]
         }
-        for entry, _ in candidates[:5]  # Limit final output
+        for entry, _ in candidates[:5]
     ]
-
-# CLI test mode
-if __name__ == "__main__":
-    query = input("Enter your topic query: ")
-    results = search_by_topic(query)
-    for r in results:
-        print(f"Requirement {r['id']}: {r['text']} [tags: {', '.join(r['tags'])}]\n")

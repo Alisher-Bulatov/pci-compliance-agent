@@ -1,3 +1,4 @@
+from jinja2 import Template
 from pathlib import Path
 
 TEMPLATES = {
@@ -8,9 +9,6 @@ TEMPLATES = {
 def format_prompt(user_input: str, context: str, type: str = "default", **kwargs) -> str:
     path = TEMPLATES.get(type, TEMPLATES["default"])
     with open(path, "r", encoding="utf-8") as f:
-        template = f.read()
-    return template.format_map({
-        "user_input": user_input,
-        "context": context,
-        **kwargs
-    })
+        raw_template = f.read()
+    template = Template(raw_template)
+    return template.render(user_input=user_input, context=context, **kwargs)

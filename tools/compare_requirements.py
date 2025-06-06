@@ -1,6 +1,6 @@
 from tools.get_requirement_text import get_requirement_text
 
-def compare_requirements(requirement_ids):
+def main(requirement_ids):
     if not isinstance(requirement_ids, list) or len(requirement_ids) < 2:
         return "Please provide at least two requirement IDs to compare."
 

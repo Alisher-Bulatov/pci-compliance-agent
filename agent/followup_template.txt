@@ -1,7 +1,7 @@
 You previously invoked a TOOL_CALL. Here is the result of that operation:
 
 → Tool Result:
-{tool_result}
+{{ tool_result }}
 
 Now, based on this result, provide a concise and helpful response to the user's original request.
 
@@ -13,6 +13,6 @@ Now, based on this result, provide a concise and helpful response to the user's 
 - Assume the user is expecting a final answer unless clarification was requested.
 
 User Input:
-{user_input}
+{{ user_input }}
 
 Response:
