@@ -1,17 +1,23 @@
-# PCI DSS Compliance Agent
+# 🛡️ PCI DSS Compliance Agent
 
-This project is a document-aware assistant to help with PCI DSS compliance.
-
-It uses a Retrieval-Augmented Generation (RAG) pipeline powered by FAISS to locate relevant PCI DSS content and combines it with LLM-generated reasoning. Tool calls (e.g., for retrieving requirement text) are executed via an MCP Server, making the system modular and extensible.
+This project is a document-aware assistant for PCI DSS compliance.  
+It uses a Retrieval-Augmented Generation (RAG) pipeline and modular tool execution to answer questions about PCI DSS requirements in a helpful, transparent, and interactive way.
 
 ---
 
 ## 🔧 Key Components
 
-- **FAISS Retriever**: Loads `pci_chunks.txt` and builds a searchable index.
-- **LLM Agent**: Uses prompt formatting to trigger tool calls where needed.
-- **MCP Server**: Executes tools like `get_requirement_text` via FastAPI.
-- **CLI Interface**: Chat with the agent from terminal using `cli.py`.
+- **FAISS Retriever**  
+  Uses `pci_chunks.txt` and a prebuilt index (`pci_index.faiss`) to locate relevant content from PCI DSS documentation.
+
+- **LLM Agent**  
+  Uses structured prompts to decide when to call tools or answer directly. Supports both reasoning and execution steps.
+
+- **MCP Server**  
+  A FastAPI service that executes tools like `get_requirement_text`, `search_by_topic`, or `compare_requirements`.
+
+- **CLI Chat Interface**  
+  Run `main.py` to start a conversation. You’ll get responses, tool calls, and updates interactively.
 
 ---
 
@@ -22,57 +28,56 @@ It uses a Retrieval-Augmented Generation (RAG) pipeline powered by FAISS to loca
    pip install -r requirements.txt
    ```
 
-2. Build the FAISS index:
+2. Start the tool server (in another terminal):
    ```bash
-   python scripts/build_index.py
+   uvicorn tools.main:app --reload
    ```
 
-3. Start the MCP server:
+3. Run the CLI interface:
    ```bash
-   uvicorn mcp_server.main:app --reload
+   python main.py
    ```
 
-4. In a separate terminal, start the CLI interface:
-   ```bash
-   python cli.py
-   ```
-
-5. Type `exit` or `quit` to end the session.
+4. Type `exit` or `quit` to end the session.
 
 ---
 
 ## 🧠 Assistant Capabilities
 
-The agent can:
+The agent uses LLM reasoning to:
 
-- Retrieve requirement text by ID
-- Search for relevant topics (e.g., firewalls, encryption)
-- Compare requirements side by side
-- Recommend tools when user intent is ambiguous
+- Answer questions about PCI DSS requirement texts
+- Search for relevant topics using embeddings
+- Compare multiple requirements
+- Recommend appropriate tools when user intent is ambiguous
 
-All logic is tool-call driven and modular.
+All logic follows a strict tool-call discipline.
 
-### ✅ Supported Tools
+### ✅ Current Supported Tools
 
 | Tool | Description |
 |------|-------------|
-| `get_requirement_text` | Retrieve the exact text of a specific requirement |
-| `search_by_topic` | Retrieve relevant requirements based on a topic |
-| `compare_requirements` | Compare full text of two or more requirements |
-| `recommend_tool` | Suggest the best tool based on vague input |
+| `get_requirement_text` | Retrieves exact text of a specific requirement (e.g., 3.2.1) |
+| `search_by_topic` | Retrieves top relevant requirements for a topic (e.g., encryption, firewalls) |
+| `compare_requirements` | Compares the full text of two or more requirement IDs |
+| `recommend_tool` | Suggests the best tool to use when the user input is vague or exploratory |
 
 ---
 
 ## 🔍 Sample Prompts
 
-Try interacting with the agent using:
+Try these:
 
 ```text
 hello
 What does 3.2.1 say?
-Compare 1.1.2 and 12.5.1
-Search for firewall rules
-What are some encryption requirements?
+Can you show me the wording of requirement 1.1.2?
+Compare requirements 1.1.2 and 12.5.1
+Help me understand encryption requirements
+What should I consider for secure design?
+What about segmentation boundaries?
+Is 3.2.1 about sensitive data?
+I already know 3.2.1 is about not storing sensitive auth data, but what else should I know?
 ```
 
 ---
@@ -81,32 +86,33 @@ What are some encryption requirements?
 
 ```text
 .
-├── cli.py                      # CLI interface entry point
-├── mcp_server/
-│   └── main.py                 # MCP server with FastAPI tools
-├── tools/                      # Tool logic for requirement analysis
+├── main.py                     # CLI interface and orchestrator
 ├── agent/
-│   ├── prompt_template.txt
-│   ├── followup_template.txt
-│   ├── llm_wrapper.py
-│   ├── prompt_formatter.py
-│   └── tool_call_parser.py
+│   ├── prompt_template.txt     # Main system prompt
+│   ├── followup_template.txt   # Follow-up prompt after TOOL_CALL
+│   ├── llm_wrapper.py          # Interface to LLM model
+│   ├── prompt_formatter.py     # Prompt formatting logic
+│   └── tool_call_parser.py     # TOOL_CALL extraction from LLM output
 ├── retrieval/
-│   ├── retriever.py
+│   ├── retriever.py            # FAISS-based document retriever
+│   ├── build_index.py          # Tool to build the FAISS index
 │   └── data/
-│       ├── pci_index.faiss
-│       └── mapping.pkl
-├── scripts/
-│   └── build_index.py
+│       ├── pci_index.faiss     # Vector store
+│       └── mapping.pkl         # Requirement ID to text mapping
+├── tools/
+│   ├── main.py                 # MCP tool server
+│   └── get_requirement_text.py etc.
 ```
 
 ---
 
-## 🧪 Debugging Tips
+## 🧪 Testing and Debugging
 
-- `Parsed TOOL_CALL:` — agent is making an API call.
-- `→ Tool Result:` — shows the tool response.
-- `=== Follow-up from LLM ===` — explanation from the assistant.
+Make sure to watch the CLI output for:
+
+- `Parsed TOOL_CALL:` → confirms tool was triggered
+- `→ Tool Result:` → shows the actual tool response
+- `=== Follow-up from LLM ===` → assistant explains result
 
 ---
 
