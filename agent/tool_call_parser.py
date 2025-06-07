@@ -1,6 +1,7 @@
 import json
 import re
 
+
 def extract_tool_call(text: str) -> dict:
     try:
         match = re.search(r"{.*}", text, re.DOTALL)

@@ -1,12 +1,7 @@
-import faiss
-import pickle
-import numpy as np
-from sentence_transformers import SentenceTransformer
+from retrieval.retriever import PCIDocumentRetriever
 
-INDEX_PATH = "data/pci_index.faiss"
-MAPPING_PATH = "data/mapping.pkl"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 TOP_K = 10
+
 
 def extract_query_tags(query):
     lowered = query.lower()
@@ -23,22 +18,15 @@ def extract_query_tags(query):
         tags.append("compliance")
     return tags
 
-def main(query):
-    index = faiss.read_index(INDEX_PATH)
-    with open(MAPPING_PATH, "rb") as f:
-        mapping = pickle.load(f)
-    embedder = SentenceTransformer(EMBEDDING_MODEL)
 
-    query_vec = embedder.encode([query])
-    D, I = index.search(np.array(query_vec), TOP_K)
+def main(query):
+    retriever = PCIDocumentRetriever()
+    results = retriever.retrieve(query, k=TOP_K)
 
     query_tags = set(extract_query_tags(query))
     candidates = []
 
-    for i in I[0]:
-        entry = mapping.get(i)
-        if not entry:
-            continue
+    for entry in results:
         entry_tags = set(entry.get("tags", []))
         overlap_score = len(entry_tags & query_tags)
         candidates.append((entry, overlap_score))
@@ -46,10 +34,6 @@ def main(query):
     candidates.sort(key=lambda x: x[1], reverse=True)
 
     return [
-        {
-            "id": entry["id"],
-            "text": entry["text"],
-            "tags": entry["tags"]
-        }
+        {"id": entry["id"], "text": entry["text"], "tags": entry["tags"]}
         for entry, _ in candidates[:5]
     ]

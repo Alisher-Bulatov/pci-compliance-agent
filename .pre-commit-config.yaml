@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        language_version: python3.11
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.15  # Closest matching pre-commit wrapper for ruff 0.11.8
+    hooks:
+      - id: ruff
+        args: [--fix]

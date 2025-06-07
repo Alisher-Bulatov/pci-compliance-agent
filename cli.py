@@ -1,5 +1,6 @@
-import requests
 import json
+import requests
+
 
 def main():
     print("🔹 PCI DSS Compliance CLI")
@@ -13,6 +14,7 @@ def main():
                 "http://localhost:8000/ask_full",
                 params={"message": message},
                 stream=True,
+                timeout=10,
             )
 
             event_handlers = {
@@ -29,15 +31,18 @@ def main():
                 try:
                     event = json.loads(line)
                     event_type = event.get("type")
-                    handler = event_handlers.get(event_type, lambda e: print(f"\n⚠️ Unknown event type: {e}\n"))
+                    handler = event_handlers.get(
+                        event_type, lambda e: print(f"\n⚠️ Unknown event type: {e}\n")
+                    )
                     handler(event)
-                except Exception as e:
-                    print(f"\n❌ Failed to process event line: {e}\n")
-                    
+                except json.JSONDecodeError as e:
+                    print(f"\n❌ Failed to decode event line: {e}\n")
+
             print()
 
-        except Exception as e:
+        except requests.RequestException as e:
             print(f"\n❌ Request failed: {e}\n")
+
 
 if __name__ == "__main__":
     main()

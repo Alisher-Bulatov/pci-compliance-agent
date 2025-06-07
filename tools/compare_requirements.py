@@ -1,16 +1,36 @@
-from tools.get_requirement_text import get_requirement_text
+import requests
+
 
 def main(requirement_ids):
     if not isinstance(requirement_ids, list) or len(requirement_ids) < 2:
-        return "Please provide at least two requirement IDs to compare."
+        return {"error": "Please provide at least two requirement IDs to compare."}
 
-    output = []
+    results = []
+
     for req_id in requirement_ids:
-        text = get_requirement_text(req_id)
-        output.append(f"Requirement {req_id}:\n{text}\n")
+        try:
+            response = requests.post(
+                "http://localhost:8000/tool_call",
+                json={
+                    "tool_name": "get_requirement_text",
+                    "tool_input": {"requirement_id": req_id},
+                },
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json().get("result", {})
 
-    output.append("Summary:")
-    for req_id in requirement_ids:
-        output.append(f"- {req_id}: see above for details.")
+            results.append(
+                {
+                    "id": req_id,
+                    "text": data.get("text", "Unavailable"),
+                    "tags": data.get("tags", []),
+                }
+            )
 
-    return "\n".join(output)
+        except requests.RequestException as e:
+            results.append(
+                {"id": req_id, "text": f"❌ Failed to fetch: {e}", "tags": []}
+            )
+
+    return results

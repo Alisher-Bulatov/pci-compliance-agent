@@ -1,9 +1,10 @@
-import faiss
+import re
 import pickle
+from pathlib import Path
+
+import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
-import re
-from pathlib import Path
 
 # === Configuration ===
 SOURCE_FILE = "data/pci_chunks.txt"
@@ -13,39 +14,60 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 # === Simple tag rules ===
 TAG_KEYWORDS = {
-    "encryption": ["encrypt", "cryptographic", "cipher", "key management", "decryption", "protect cardholder data"],
-    "authentication": ["authentication", "auth", "login", "password", "PIN", "biometric"],
+    "encryption": [
+        "encrypt",
+        "cryptographic",
+        "cipher",
+        "key management",
+        "decryption",
+        "protect cardholder data",
+    ],
+    "authentication": [
+        "authentication",
+        "auth",
+        "login",
+        "password",
+        "PIN",
+        "biometric",
+    ],
     "network": ["firewall", "router", "network", "packet", "traffic"],
     "compliance": ["compliance", "audit", "responsibility"],
     "storage": ["store", "storage", "retain", "save", "database"],
 }
 
+
 def extract_tags(text):
-    tags = set()
+    tag_set = set()
     lowered = text.lower()
     for tag, keywords in TAG_KEYWORDS.items():
         if any(kw in lowered for kw in keywords):
-            tags.add(tag)
-    return list(tags)
+            tag_set.add(tag)
+    return list(tag_set)
 
-def extract_id_and_text(line):
-    match = re.match(r"Requirement (\d[\d.]*)\s*:\s*(.+)", line)
+
+def extract_id_and_text(raw_line):
+    match = re.match(r"Requirement (\d[\d.]*)\s*:\s*(.+)", raw_line)
     if match:
         return match.group(1), match.group(2)
     return None, None
 
+
 # === Load and parse data ===
 source_path = Path(SOURCE_FILE)
-lines = [line.strip() for line in source_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+lines = [
+    line.strip()
+    for line in source_path.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
 
 mapping = {}
 texts = []
-for i, line in enumerate(lines):
-    req_id, req_text = extract_id_and_text(line)
+for line_num, content in enumerate(lines):
+    req_id, req_text = extract_id_and_text(content)
     if not req_id:
         continue
-    tags = extract_tags(req_text)
-    entry = {"id": req_id, "text": req_text, "tags": tags}
+    tag_list = extract_tags(req_text)
+    entry = {"id": req_id, "text": req_text, "tags": tag_list}
     mapping[len(mapping)] = entry
     texts.append(f"{req_id}: {req_text}")
 

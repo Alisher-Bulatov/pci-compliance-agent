@@ -6,13 +6,16 @@ from retrieval.retriever import PCIDocumentRetriever
 
 retriever = PCIDocumentRetriever()
 
+
 # Structured event-based pipeline
 def run_full_pipeline(message: str):
-    yield { "type": "stage", "label": "Retrieving related requirements" }
+    yield {"type": "stage", "label": "Retrieving related requirements"}
     try:
         context_chunks = retriever.retrieve(message, k=3)
-    except Exception as e:
-        yield { "type": "error", "stage": "retrieval", "message": str(e) }
+    except (
+        Exception
+    ) as e:  # General catch justified to avoid pipeline crash from external index
+        yield {"type": "error", "stage": "retrieval", "message": str(e)}
         return
 
     context = "\n".join(
@@ -22,26 +25,29 @@ def run_full_pipeline(message: str):
 
     prompt = format_prompt(message, context)
 
-    yield { "type": "stage", "label": "Thinking..." }
+    yield {"type": "stage", "label": "Thinking..."}
     buffered = ""
     try:
         for token in query_llm(prompt, stream=True):
-            yield { "type": "token", "text": token }
+            yield {"type": "token", "text": token}
             buffered += token
-    except Exception as e:
-        yield { "type": "error", "stage": "llm_initial", "message": str(e) }
+    except Exception as e:  # LLM failures must not break the pipeline
+        yield {"type": "error", "stage": "llm_initial", "message": str(e)}
         return
 
     try:
         tool_call = extract_tool_call(buffered)
-    except Exception:
+    except ValueError:  # Only expect parsing errors here
         tool_call = None
 
     if not tool_call:
-        yield { "type": "info", "message": "✅ No tool call detected. Response complete." }
+        yield {
+            "type": "info",
+            "message": "✅ No tool call detected. Response complete.",
+        }
         return
 
-    yield { "type": "stage", "label": "Tool call detected, executing..." }
+    yield {"type": "stage", "label": "Tool call detected, executing..."}
 
     try:
         tool_result = handle_tool_call(tool_call["tool_name"], tool_call["tool_input"])
@@ -53,21 +59,21 @@ def run_full_pipeline(message: str):
             if isinstance(tool_result, list)
             else str(tool_result)
         )
-        yield { "type": "tool_result", "text": tool_result_str }
-    except Exception as e:
-        yield { "type": "error", "stage": "tool", "message": str(e) }
+        yield {"type": "tool_result", "text": tool_result_str}
+    except Exception as e:  # Tool calls may involve external imports or data issues
+        yield {"type": "error", "stage": "tool", "message": str(e)}
         return
 
     followup_prompt = format_prompt(
         user_input=message,
         context="",
-        type="followup",
+        template_type="followup",
         tool_result=tool_result_str,
     )
 
-    yield { "type": "stage", "label": "Reasoning based on tool result..." }
+    yield {"type": "stage", "label": "Reasoning based on tool result..."}
     try:
         for token in query_llm(followup_prompt, stream=True):
-            yield { "type": "token", "text": token }
-    except Exception as e:
-        yield { "type": "error", "stage": "llm_followup", "message": str(e) }
+            yield {"type": "token", "text": token}
+    except Exception as e:  # Final LLM stage failure
+        yield {"type": "error", "stage": "llm_followup", "message": str(e)}
