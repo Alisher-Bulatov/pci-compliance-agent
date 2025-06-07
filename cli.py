@@ -10,7 +10,7 @@ def main():
 
         try:
             response = requests.get(
-                "http://localhost:8000/ask_full_verbose",
+                "http://localhost:8000/ask_full",
                 params={"message": message},
                 stream=True,
             )
