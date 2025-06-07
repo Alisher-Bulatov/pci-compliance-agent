@@ -1,22 +1,26 @@
 # 🛡️ PCI DSS Compliance Agent
 
-This project is a document-aware assistant for PCI DSS compliance.  
-It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool execution to help users understand and interact with PCI DSS requirements in a transparent and intelligent way.
+This project is a document-aware assistant for PCI DSS (Payment Card Industry Data Security Standard) compliance.  
+It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool execution to help users understand and interact with PCI DSS requirements through transparent, structured reasoning and tool-based execution.
+
+![Python](https://img.shields.io/badge/python-3.11+-blue)
+![License](https://img.shields.io/badge/license-Unlicensed-lightgrey)
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
 
 ---
 
 ## 🔧 Key Components
 
-- **FAISS Retriever**:  
+- **FAISS Retriever**  
   Uses `pci_chunks.txt` and a prebuilt FAISS index (`pci_index.faiss`) to locate relevant content from PCI DSS documentation.
 
-- **LLM Agent**:  
+- **LLM Agent**  
   Leverages structured prompts to determine whether to respond directly or call a tool. Enables reasoning and step-by-step execution.
 
-- **MCP Server (Modular Command Processor)**:  
+- **MCP Server (Modular Command Processor)**  
   A FastAPI-based service that handles backend execution of tools such as `get_requirement_text`, `search_by_topic`, and `compare_requirements`.
 
-- **CLI Chat Interface**:  
+- **CLI Chat Interface**  
   Launch via `cli.py` to start an interactive, conversational session with the assistant.
 
 ---
@@ -25,32 +29,45 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 
 ```
 .
-├── agent/                # LLM logic, prompt templates, and tool call parser
+├── agent/                        # LLM logic, models, and prompt templates
+│   ├── models/                   # Shared Pydantic schemas
+│   │   ├── base.py
+│   │   └── requirement.py
 │   ├── llm_wrapper.py
 │   ├── prompt_formatter.py
 │   ├── tool_call_parser.py
-│   └── *.txt             # Prompt templates and followup formats
-├── cli.py                # CLI entry point
-├── data/                 # Vector index and document chunks
+│   ├── prompt_template.txt
+│   └── followup_template.txt
+│
+├── cli.py                        # CLI entry point for interactive chat
+│
+├── data/                         # Vector index and document chunks
 │   ├── pci_chunks.txt
 │   ├── pci_index.faiss
 │   └── mapping.pkl
-├── mcp_server/           # FastAPI backend for tool execution
+│
+├── mcp_server/                   # FastAPI backend for tool execution
 │   ├── main.py
 │   ├── pipeline.py
 │   ├── router.py
 │   └── tool_dispatcher.py
-├── retrieval/            # FAISS retriever wrapper
+│
+├── retrieval/                    # FAISS-based retriever logic
 │   └── retriever.py
-├── scripts/              # One-time setup scripts
+│
+├── scripts/                      # One-time setup scripts
 │   └── build_index.py
-├── tools/                # Tool definitions
+│
+├── tools/                        # Tool implementations
 │   ├── get_requirement_text.py
 │   ├── search_by_topic.py
 │   ├── compare_requirements.py
 │   └── recommend_tool.py
-├── requirements.txt
-└── README.md
+│
+├── requirements.txt              # Python dependencies
+├── .pylintrc                     # Pylint config
+├── .pre-commit-config.yaml       # Pre-commit hook config
+└── README.md                     # Project documentation
 ```
 
 ---
@@ -80,25 +97,53 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 
 ---
 
-## 🧠 Assistant Capabilities
+## 🧠 What the Agent Can Do
 
-The agent uses structured LLM reasoning to:
+- 🔍 **Understand** vague queries like “Help me with encryption”
+- 📑 **Retrieve** exact PCI DSS requirement text by ID
+- 🧠 **Reason** about tool selection when user input is ambiguous
+- 🧭 **Compare** requirements in context with summarized differences
+- 🔗 **Stream responses** incrementally with thoughtful follow-up logic
 
-- Retrieve the exact text of PCI DSS requirements by ID
-- Perform semantic searches for relevant topics (e.g., "firewalls", "encryption")
-- Compare multiple requirements to highlight differences
-- Suggest which tool to use based on vague queries
+---
 
-All logic is built around explicit tool calls and reproducible outputs.
+## 🧪 Testing
 
-### ✅ Available Tools
+Run static analysis and tests:
 
-| Tool Name              | Description |
-|------------------------|-------------|
-| `get_requirement_text` | Retrieves the full text of a specific requirement (e.g., `3.2.1`) |
-| `search_by_topic`      | Finds top requirements related to a keyword/topic |
-| `compare_requirements` | Compares full text of multiple requirement IDs |
-| `recommend_tool`       | Infers the best tool to use for ambiguous queries |
+```bash
+pylint --rcfile=.pylintrc $(git ls-files '*.py')
+pytest
+```
+
+Optional tools:
+- `ruff check .`
+- `mypy agent/ tools/`
+
+---
+
+## 🔧 Setup Notes
+
+- This project assumes a local Ollama or similar LLM backend is running.
+- For vector search, ensure `pci_chunks.txt` and `pci_index.faiss` exist in `./data/`. If not, run:
+
+```bash
+python scripts/build_index.py
+```
+
+---
+
+## 🤝 Contributing
+
+Clone, set up a virtualenv, install deps, and open PRs or issues.
+
+```bash
+git clone <repo-url>
+cd pci-compliance-agent
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
 ---
 
@@ -123,5 +168,3 @@ I already know 3.2.1 is about not storing sensitive auth data, but what else sho
 ## 📜 License
 
 None
-
----
