@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 import json
 
 from agent.llm_wrapper import query_llm
