@@ -32,33 +32,16 @@ def handle_tool_call(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, An
         main_func = getattr(tool_module, "main", None)
 
         if not callable(main_func):
-            return error_response("dispatch", "Tool 'main' is not callable", tool_name)
+            raise TypeError("Tool 'main' is not callable")
 
         if InputSchema is None or OutputSchema is None:
-            return error_response(
-                "introspection",
-                "Tool must define both InputSchema and OutputSchema",
-                tool_name,
-            )
+            raise AttributeError("Tool must define both InputSchema and OutputSchema")
 
-        try:
-            input_obj = InputSchema(**tool_input)
-        except ValidationError as ve:
-            return error_response(
-                "validation",
-                "Input validation failed",
-                tool_name,
-                details=ve.errors(),
-            )
-
+        input_obj = InputSchema(**tool_input)
         result_obj = main_func(input_obj)
 
         if not isinstance(result_obj, OutputSchema):
-            return error_response(
-                "output-validation",
-                "Tool did not return OutputSchema instance",
-                tool_name,
-            )
+            raise TypeError("Tool did not return OutputSchema instance")
 
         return {
             "status": "success",
@@ -69,9 +52,17 @@ def handle_tool_call(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, An
     except ModuleNotFoundError:
         return error_response("import", f"Tool '{tool_name}' not found", tool_name)
 
-    except Exception as e:  # noqa: BLE001
+    except ValidationError as ve:
+        return error_response(
+            "validation", "Input validation failed", tool_name, details=ve.errors()
+        )
+
+    except (AttributeError, TypeError, ValueError) as known_error:
+        return error_response("execution", str(known_error), tool_name)
+
+    except Exception as e:
         logger.exception("Tool execution failed for '%s'", tool_name)
-        return error_response("execution", str(e), tool_name)
+        raise RuntimeError(f"Unhandled exception in tool '{tool_name}': {e}") from e
 
 
 @tool_router.post("/tool_call")

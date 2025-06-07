@@ -1,24 +1,17 @@
-from typing import List, Literal
+from typing import Literal
 
 from pydantic import BaseModel
 
 from retrieval.retriever import PCIDocumentRetriever
-from agent.tool_schema import BaseToolOutputSchema
+from agent.models.requirement import RequirementEntry, RequirementOutput
 
 
 class InputSchema(BaseModel):
     query: str
 
 
-class RequirementEntry(BaseModel):
-    id: str
-    text: str
-    tags: List[str]
-
-
-class OutputSchema(BaseToolOutputSchema):
+class OutputSchema(RequirementOutput):
     tool_name: Literal["search_by_topic"]
-    result: List[RequirementEntry]
 
 
 retriever = PCIDocumentRetriever()

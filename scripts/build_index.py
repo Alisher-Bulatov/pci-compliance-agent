@@ -77,6 +77,7 @@ embeddings = np.asarray(embedder.encode(texts, show_progress_bar=True), dtype="f
 embedding_dim = embeddings.shape[1]
 
 index = faiss.IndexFlatL2(embedding_dim)
+# pylint: disable=no-value-for-parameter
 index.add(embeddings)
 
 # === Save outputs ===

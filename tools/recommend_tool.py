@@ -1,6 +1,6 @@
 from typing import Literal
 from pydantic import BaseModel
-from agent.tool_schema import BaseToolOutputSchema
+from agent.models.base import BaseToolOutputSchema
 
 
 class InputSchema(BaseModel):

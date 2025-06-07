@@ -3,22 +3,15 @@ from typing import List, Literal
 import requests
 from pydantic import BaseModel
 
-from agent.tool_schema import BaseToolOutputSchema
+from agent.models.requirement import RequirementEntry, RequirementOutput
 
 
 class InputSchema(BaseModel):
     requirement_ids: List[str]
 
 
-class RequirementEntry(BaseModel):
-    id: str
-    text: str
-    tags: List[str]
-
-
-class OutputSchema(BaseToolOutputSchema):
+class OutputSchema(RequirementOutput):
     tool_name: Literal["compare_requirements"]
-    result: List[RequirementEntry]
 
 
 def main(input_data: InputSchema) -> OutputSchema:
