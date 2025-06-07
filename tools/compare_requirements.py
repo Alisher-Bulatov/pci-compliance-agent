@@ -1,36 +1,58 @@
+from typing import List, Literal
+
 import requests
+from pydantic import BaseModel
+
+from agent.tool_schema import BaseToolOutputSchema
 
 
-def main(requirement_ids):
-    if not isinstance(requirement_ids, list) or len(requirement_ids) < 2:
-        return {"error": "Please provide at least two requirement IDs to compare."}
+class InputSchema(BaseModel):
+    requirement_ids: List[str]
 
-    results = []
 
-    for req_id in requirement_ids:
+class RequirementEntry(BaseModel):
+    id: str
+    text: str
+    tags: List[str]
+
+
+class OutputSchema(BaseToolOutputSchema):
+    tool_name: Literal["compare_requirements"]
+    result: List[RequirementEntry]
+
+
+def main(input_data: InputSchema) -> OutputSchema:
+    """Fetches and compares the requirement texts based on given IDs."""
+    results: List[RequirementEntry] = []
+
+    for req_id in input_data.requirement_ids:
         try:
+            payload = {
+                "tool_name": "get_requirement_text",
+                "tool_input": {"requirement_id": req_id},
+            }
             response = requests.post(
                 "http://localhost:8000/tool_call",
-                json={
-                    "tool_name": "get_requirement_text",
-                    "tool_input": {"requirement_id": req_id},
-                },
+                json=payload,
                 timeout=10,
             )
             response.raise_for_status()
-            data = response.json().get("result", {})
+            outer = response.json().get("result", {})
 
-            results.append(
-                {
-                    "id": req_id,
-                    "text": data.get("text", "Unavailable"),
-                    "tags": data.get("tags", []),
-                }
+            entry = RequirementEntry(
+                id=outer.get("id", req_id),
+                text=outer.get("text", "Unavailable"),
+                tags=outer.get("tags", []),
             )
+            results.append(entry)
 
         except requests.RequestException as e:
             results.append(
-                {"id": req_id, "text": f"❌ Failed to fetch: {e}", "tags": []}
+                RequirementEntry(
+                    id=req_id,
+                    text=f"❌ Failed to fetch: {e}",
+                    tags=[],
+                )
             )
 
-    return results
+    return OutputSchema(tool_name="compare_requirements", result=results)

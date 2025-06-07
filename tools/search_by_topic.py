@@ -1,39 +1,39 @@
+from typing import List, Literal
+
+from pydantic import BaseModel
+
 from retrieval.retriever import PCIDocumentRetriever
-
-TOP_K = 10
-
-
-def extract_query_tags(query):
-    lowered = query.lower()
-    tags = []
-    if any(word in lowered for word in ["encrypt", "crypto", "key"]):
-        tags.append("encryption")
-    if any(word in lowered for word in ["auth", "password", "login"]):
-        tags.append("authentication")
-    if any(word in lowered for word in ["store", "retain", "database"]):
-        tags.append("storage")
-    if any(word in lowered for word in ["firewall", "network", "router"]):
-        tags.append("network")
-    if "compliance" in lowered or "audit" in lowered:
-        tags.append("compliance")
-    return tags
+from agent.tool_schema import BaseToolOutputSchema
 
 
-def main(query):
-    retriever = PCIDocumentRetriever()
-    results = retriever.retrieve(query, k=TOP_K)
+class InputSchema(BaseModel):
+    query: str
 
-    query_tags = set(extract_query_tags(query))
-    candidates = []
 
-    for entry in results:
-        entry_tags = set(entry.get("tags", []))
-        overlap_score = len(entry_tags & query_tags)
-        candidates.append((entry, overlap_score))
+class RequirementEntry(BaseModel):
+    id: str
+    text: str
+    tags: List[str]
 
-    candidates.sort(key=lambda x: x[1], reverse=True)
 
-    return [
-        {"id": entry["id"], "text": entry["text"], "tags": entry["tags"]}
-        for entry, _ in candidates[:5]
+class OutputSchema(BaseToolOutputSchema):
+    tool_name: Literal["search_by_topic"]
+    result: List[RequirementEntry]
+
+
+retriever = PCIDocumentRetriever()
+
+
+def main(input_data: InputSchema) -> OutputSchema:
+    """Perform vector search on PCI DSS chunks based on query string."""
+    chunks = retriever.retrieve(input_data.query, k=3)
+    entries = [
+        RequirementEntry(
+            id=c["id"],
+            text=c["text"],
+            tags=c.get("tags", []),
+        )
+        for c in chunks
     ]
+
+    return OutputSchema(tool_name="search_by_topic", result=entries)

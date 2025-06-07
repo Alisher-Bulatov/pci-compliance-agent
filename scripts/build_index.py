@@ -36,7 +36,7 @@ TAG_KEYWORDS = {
 }
 
 
-def extract_tags(text):
+def extract_tags(text: str) -> list[str]:
     tag_set = set()
     lowered = text.lower()
     for tag, keywords in TAG_KEYWORDS.items():
@@ -45,7 +45,7 @@ def extract_tags(text):
     return list(tag_set)
 
 
-def extract_id_and_text(raw_line):
+def extract_id_and_text(raw_line: str) -> tuple[str | None, str | None]:
     match = re.match(r"Requirement (\d[\d.]*)\s*:\s*(.+)", raw_line)
     if match:
         return match.group(1), match.group(2)
@@ -62,7 +62,7 @@ lines = [
 
 mapping = {}
 texts = []
-for line_num, content in enumerate(lines):
+for content in lines:
     req_id, req_text = extract_id_and_text(content)
     if not req_id:
         continue
@@ -73,11 +73,11 @@ for line_num, content in enumerate(lines):
 
 # === Embed and index ===
 embedder = SentenceTransformer(EMBEDDING_MODEL)
-embeddings = embedder.encode(texts, show_progress_bar=True)
+embeddings = np.asarray(embedder.encode(texts, show_progress_bar=True), dtype="float32")
 embedding_dim = embeddings.shape[1]
 
 index = faiss.IndexFlatL2(embedding_dim)
-index.add(np.array(embeddings))
+index.add(embeddings)
 
 # === Save outputs ===
 faiss.write_index(index, INDEX_FILE)

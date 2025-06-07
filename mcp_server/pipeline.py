@@ -7,14 +7,11 @@ from retrieval.retriever import PCIDocumentRetriever
 retriever = PCIDocumentRetriever()
 
 
-# Structured event-based pipeline
 def run_full_pipeline(message: str):
     yield {"type": "stage", "label": "Retrieving related requirements"}
     try:
         context_chunks = retriever.retrieve(message, k=3)
-    except (
-        Exception
-    ) as e:  # General catch justified to avoid pipeline crash from external index
+    except (RuntimeError, ValueError, OSError) as e:
         yield {"type": "error", "stage": "retrieval", "message": str(e)}
         return
 
@@ -31,13 +28,13 @@ def run_full_pipeline(message: str):
         for token in query_llm(prompt, stream=True):
             yield {"type": "token", "text": token}
             buffered += token
-    except Exception as e:  # LLM failures must not break the pipeline
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         yield {"type": "error", "stage": "llm_initial", "message": str(e)}
         return
 
     try:
         tool_call = extract_tool_call(buffered)
-    except ValueError:  # Only expect parsing errors here
+    except ValueError:
         tool_call = None
 
     if not tool_call:
@@ -51,18 +48,20 @@ def run_full_pipeline(message: str):
 
     try:
         tool_result = handle_tool_call(tool_call["tool_name"], tool_call["tool_input"])
-        tool_result_str = (
-            "\n".join(
-                f"Requirement {r['id']}: {r['text']} [tags: {', '.join(r.get('tags', []))}]"
-                for r in tool_result
-            )
-            if isinstance(tool_result, list)
-            else str(tool_result)
-        )
-        yield {"type": "tool_result", "text": tool_result_str}
-    except Exception as e:  # Tool calls may involve external imports or data issues
+        yield {"type": "tool_result", "text": tool_result}
+    except (KeyError, TypeError, ValueError) as e:
         yield {"type": "error", "stage": "tool", "message": str(e)}
         return
+
+    # Flatten the result for LLM follow-up only
+    flattened_result = tool_result.get("result", tool_result)
+    if isinstance(flattened_result, list):
+        tool_result_str = "\n".join(
+            f"Requirement {r['id']}: {r['text']} [tags: {', '.join(r.get('tags', []))}]"
+            for r in flattened_result
+        )
+    else:
+        tool_result_str = str(flattened_result)
 
     followup_prompt = format_prompt(
         user_input=message,
@@ -75,5 +74,5 @@ def run_full_pipeline(message: str):
     try:
         for token in query_llm(followup_prompt, stream=True):
             yield {"type": "token", "text": token}
-    except Exception as e:  # Final LLM stage failure
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         yield {"type": "error", "stage": "llm_followup", "message": str(e)}

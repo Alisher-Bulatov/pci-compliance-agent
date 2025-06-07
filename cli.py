@@ -14,15 +14,46 @@ def main():
                 "http://localhost:8000/ask_full",
                 params={"message": message},
                 stream=True,
-                timeout=10,
+                timeout=15,
             )
 
+            def handle_stage(event):
+                print(f"\n🟦 {event['label']}\n")
+
+            def handle_token(event):
+                print(event["text"], end="", flush=True)
+
+            def handle_tool_result(event):
+                result = event["text"]
+
+                print("\n\n🟩 Tool Result:")
+                if isinstance(result, dict):
+                    if result.get("status") == "error":
+                        print(f"❌ Tool error: {result.get('message')}")
+                        if "details" in result:
+                            print("   Validation issues:")
+                            for detail in result["details"]:
+                                loc = ".".join(
+                                    str(part) for part in detail.get("loc", [])
+                                )
+                                print(f"   → {loc}: {detail.get('msg')}")
+                    else:
+                        print(json.dumps(result, indent=2))
+                else:
+                    print(str(result))
+
+            def handle_error(event):
+                print(f"\n❌ {event['message']}\n")
+
+            def handle_info(event):
+                print(f"\nℹ️ {event['message']}\n")
+
             event_handlers = {
-                "stage": lambda e: print(f"\n🟦 {e['label']}\n"),
-                "token": lambda e: print(e["text"], end="", flush=True),
-                "tool_result": lambda e: print(f"\n\n🟩 Tool Result:\n{e['text']}\n"),
-                "error": lambda e: print(f"\n❌ {e['message']}\n"),
-                "info": lambda e: print(f"\nℹ️ {e['message']}\n"),
+                "stage": handle_stage,
+                "token": handle_token,
+                "tool_result": handle_tool_result,
+                "error": handle_error,
+                "info": handle_info,
             }
 
             for line in response.iter_lines(decode_unicode=True):
@@ -38,7 +69,7 @@ def main():
                 except json.JSONDecodeError as e:
                     print(f"\n❌ Failed to decode event line: {e}\n")
 
-            print()
+            print()  # spacing between interactions
 
         except requests.RequestException as e:
             print(f"\n❌ Request failed: {e}\n")
