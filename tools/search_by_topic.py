@@ -1,3 +1,5 @@
+"""Search for PCI DSS requirements related to a specific topic or keyword."""
+
 from typing import Literal
 
 from pydantic import BaseModel

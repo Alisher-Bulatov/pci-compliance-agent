@@ -1,3 +1,5 @@
+"""Suggest the most appropriate tool based on the user's query."""
+
 from typing import Literal
 from pydantic import BaseModel
 from agent.models.base import BaseToolOutputSchema

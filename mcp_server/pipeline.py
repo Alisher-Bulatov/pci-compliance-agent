@@ -1,8 +1,10 @@
+from retrieval.retriever import PCIDocumentRetriever
+from tools import get_tool_overview
+
 from agent.llm_wrapper import query_llm
 from agent.prompt_formatter import format_prompt
 from agent.tool_call_parser import extract_tool_call
 from mcp_server.tool_dispatcher import handle_tool_call
-from retrieval.retriever import PCIDocumentRetriever
 
 retriever = PCIDocumentRetriever()
 
@@ -20,7 +22,11 @@ def run_full_pipeline(message: str):
         for c in context_chunks
     )
 
-    prompt = format_prompt(message, context)
+    # ✅ Inject tool help
+    tool_help = get_tool_overview()
+    prompt = format_prompt(
+        user_input=message, context=context, tool_help=tool_help, template_type="main"
+    )
 
     yield {"type": "stage", "label": "Thinking..."}
     buffered = ""
@@ -63,9 +69,11 @@ def run_full_pipeline(message: str):
     else:
         tool_result_str = str(flattened_result)
 
+    # Use blank context, regenerate tool_help (safe fallback)
     followup_prompt = format_prompt(
         user_input=message,
         context="",
+        tool_help="",  # not needed for followup
         template_type="followup",
         tool_result=tool_result_str,
     )

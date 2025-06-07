@@ -1,3 +1,5 @@
+"""Retrieve the official wording of a specific PCI DSS requirement by ID."""
+
 from pathlib import Path
 import sqlite3
 from typing import Literal

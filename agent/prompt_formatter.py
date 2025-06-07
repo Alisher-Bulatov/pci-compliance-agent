@@ -1,17 +1,24 @@
 from pathlib import Path
-from jinja2 import Template
-
-TEMPLATES = {
-    "default": Path("agent/prompt_template.txt"),
-    "followup": Path("agent/followup_template.txt"),
-}
 
 
 def format_prompt(
-    user_input: str, context: str, template_type: str = "default", **kwargs
+    user_input: str,
+    context: str,
+    tool_help: str = "",
+    template_type: str = "main",
+    tool_result: str = "",
 ) -> str:
-    path = TEMPLATES.get(template_type, TEMPLATES["default"])
-    with open(path, "r", encoding="utf-8") as f:
-        raw_template = f.read()
-    template = Template(raw_template)
-    return template.render(user_input=user_input, context=context, **kwargs)
+    if template_type == "followup":
+        template_path = Path("agent/followup_template.txt")
+        template = template_path.read_text(encoding="utf-8")
+        return template.replace("{{ tool_result }}", tool_result).replace(
+            "{{ user_input }}", user_input
+        )
+
+    template_path = Path("agent/prompt_template.txt")
+    template = template_path.read_text(encoding="utf-8")
+    return (
+        template.replace("{{ user_input }}", user_input)
+        .replace("{{ context }}", context)
+        .replace("{{ tool_help }}", tool_help)
+    )

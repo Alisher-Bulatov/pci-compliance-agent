@@ -1,3 +1,5 @@
+"""Compare the differences between two or more PCI DSS requirements."""
+
 from typing import List, Literal
 
 import requests
