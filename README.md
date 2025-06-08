@@ -138,7 +138,7 @@ python scripts/build_index.py
 Clone, set up a virtualenv, install deps, and open PRs or issues.
 
 ```bash
-git clone <repo-url>
+git clone (https://github.com/Alisher-Bulatov/pci-compliance-agent)
 cd pci-compliance-agent
 python -m venv venv
 source venv/bin/activate
