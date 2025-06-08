@@ -30,3 +30,28 @@ def ask_full_handler(request: Request):
             yield json.dumps(item) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+# 🔹 GET /ask_mock — mock LLM response (for EventSource/browser dev)
+@router.get("/ask_mock")
+def ask_mock_handler(request: Request):
+    _message = request.query_params.get("message", "")
+
+    def event_stream():
+        for token in ["Mock response", " continues", "..."]:
+            yield f"data: {token}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# 🔹 GET /ask_mock_full — mock JSON ND streaming (structured events for CLI/frontend dev)
+@router.get("/ask_mock_full")
+def ask_mock_full_handler(request: Request):
+    def stream():
+        for item in [
+            {"type": "tool_result", "result": "Mock comparison output"},
+            {"type": "message", "content": "This is a follow-up message."},
+        ]:
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
