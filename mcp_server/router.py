@@ -22,11 +22,11 @@ def ask_stream_handler(request: Request):
 
 # 🔹 GET /ask_full — JSON ND streaming (structured events for CLI/frontend)
 @router.get("/ask_full")
-def ask_full_handler(request: Request):
+async def ask_full_handler(request: Request):
     message = request.query_params.get("message", "")
 
-    def stream():
-        for item in run_full_pipeline(message):
+    async def stream():
+        async for item in run_full_pipeline(message):
             yield json.dumps(item) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")

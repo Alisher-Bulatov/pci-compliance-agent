@@ -1,9 +1,11 @@
 import importlib
+import inspect
 import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ValidationError
+
 
 tool_router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -24,7 +26,9 @@ def error_response(stage: str, message: str, tool_name: str, **extra) -> Dict[st
     }
 
 
-def handle_tool_call(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_tool_call(
+    tool_name: str, tool_input: Dict[str, Any]
+) -> Dict[str, Any]:
     try:
         tool_module = importlib.import_module(f"tools.{tool_name}")
         InputSchema = getattr(tool_module, "InputSchema", None)
@@ -38,7 +42,11 @@ def handle_tool_call(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, An
             raise AttributeError("Tool must define both InputSchema and OutputSchema")
 
         input_obj = InputSchema(**tool_input)
-        result_obj = main_func(input_obj)
+
+        if inspect.iscoroutinefunction(main_func):
+            result_obj = await main_func(input_obj)
+        else:
+            result_obj = main_func(input_obj)
 
         if not isinstance(result_obj, OutputSchema):
             raise TypeError("Tool did not return OutputSchema instance")
@@ -66,5 +74,5 @@ def handle_tool_call(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, An
 
 
 @tool_router.post("/tool_call")
-def tool_call_handler(call: ToolCall) -> Dict[str, Any]:
-    return handle_tool_call(call.tool_name, call.tool_input)
+async def tool_call_handler(call: ToolCall) -> Dict[str, Any]:
+    return await handle_tool_call(call.tool_name, call.tool_input)

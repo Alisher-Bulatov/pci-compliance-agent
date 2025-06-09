@@ -1,11 +1,9 @@
-"""Compare the differences between two or more PCI DSS requirements."""
-
 from typing import List, Literal
-
-import requests
 from pydantic import BaseModel
-
 from agent.models.requirement import RequirementEntry, RequirementOutput
+
+import httpx
+import asyncio
 
 
 class InputSchema(BaseModel):
@@ -16,38 +14,33 @@ class OutputSchema(RequirementOutput):
     tool_name: Literal["compare_requirements"]
 
 
-def main(input_data: InputSchema) -> OutputSchema:
-    """Fetches and compares the requirement texts based on given IDs."""
-    results: List[RequirementEntry] = []
-
-    for req_id in input_data.requirement_ids:
-        try:
-            payload = {
-                "tool_name": "get_requirement_text",
-                "tool_input": {"requirement_id": req_id},
-            }
-            response = requests.post(
-                "http://localhost:8000/tool_call",
-                json=payload,
-                timeout=10,
+async def fetch_requirement(req_id: str) -> RequirementEntry:
+    try:
+        payload = {
+            "tool_name": "get_requirement_text",
+            "tool_input": {"requirement_id": req_id},
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                "http://localhost:8000/tool_call", json=payload
             )
             response.raise_for_status()
             outer = response.json().get("result", {})
 
-            entry = RequirementEntry(
-                id=outer.get("id", req_id),
-                text=outer.get("text", "Unavailable"),
-                tags=outer.get("tags", []),
-            )
-            results.append(entry)
+        return RequirementEntry(
+            id=outer.get("id", req_id),
+            text=outer.get("text", "Unavailable"),
+            tags=outer.get("tags", []),
+        )
+    except httpx.RequestError as e:
+        return RequirementEntry(
+            id=req_id,
+            text=f"❌ Failed to fetch: {e}",
+            tags=[],
+        )
 
-        except requests.RequestException as e:
-            results.append(
-                RequirementEntry(
-                    id=req_id,
-                    text=f"❌ Failed to fetch: {e}",
-                    tags=[],
-                )
-            )
 
+async def main(input_data: InputSchema) -> OutputSchema:
+    tasks = [fetch_requirement(req_id) for req_id in input_data.requirement_ids]
+    results = await asyncio.gather(*tasks)
     return OutputSchema(tool_name="compare_requirements", result=results)
