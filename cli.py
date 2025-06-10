@@ -66,6 +66,7 @@ def process_message(message: str, use_mock=False):
             stream=True,
             timeout=30,
         )
+        response.raise_for_status()
 
         for line in response.iter_lines(decode_unicode=True):
             if not line.strip():
@@ -83,6 +84,8 @@ def process_message(message: str, use_mock=False):
 
         print(f"\n⏱️ [dim]Response time: {time.time() - start:.2f} seconds[/dim]\n")
 
+    except requests.HTTPError as e:
+        print(f"\n[red]❌ HTTP error: {e}[/red]\n")
     except requests.RequestException as e:
         print(f"\n[red]❌ Request failed: {e}[/red]\n")
 

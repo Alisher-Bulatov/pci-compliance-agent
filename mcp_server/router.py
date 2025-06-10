@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from agent.llm_wrapper import query_llm
 from mcp_server.pipeline import run_full_pipeline
+from retrieval.retriever import clear_caches
 
 router = APIRouter()
 
@@ -124,3 +125,10 @@ async def ask_mock_full_handler(payload: AskRequest):
         ) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+# Reload retriever
+@router.post("/reload_index")
+def reload_index():
+    clear_caches()
+    return {"status": "Caches cleared and ready for reload."}
