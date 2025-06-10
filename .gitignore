@@ -44,3 +44,10 @@ Thumbs.db
 
 # Git conflict backups
 *.orig
+
+# Archived/compressed files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
