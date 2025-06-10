@@ -55,11 +55,11 @@ event_handlers = {
 def process_message(message: str):
     try:
         start = time.time()
-        response = requests.get(
+        response = requests.post(
             "http://localhost:8000/ask_full",
-            params={"message": message},
+            json={"message": message},
             stream=True,
-            timeout=15,
+            timeout=30,
         )
 
         for line in response.iter_lines(decode_unicode=True):
