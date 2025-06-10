@@ -80,6 +80,7 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 
 ---
 
+
 ## 🚀 How to Run
 
 1. **Install dependencies**:
@@ -97,13 +98,17 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
    python cli.py
    ```
 
+   Or test using the mock backend:
+   ```bash
+   python cli.py --mock -m "Compare 1.1.2 and 12.5.1"
+   ```
+
 4. **Exit** with:
    ```text
    exit
    quit
    ```
 
----
 
 ## 🧠 What the Agent Can Do
 
