@@ -52,11 +52,16 @@ event_handlers = {
 }
 
 
-def process_message(message: str):
+def process_message(message: str, use_mock=False):
     try:
         start = time.time()
+        url = (
+            "http://localhost:8000/ask_mock_full"
+            if use_mock
+            else "http://localhost:8000/ask_full"
+        )
         response = requests.post(
-            "http://localhost:8000/ask_full",
+            url,
             json={"message": message},
             stream=True,
             timeout=30,
@@ -87,6 +92,9 @@ def parse_args():
     parser.add_argument(
         "-m", "--message", type=str, help="Send a single query and exit"
     )
+    parser.add_argument(
+        "--mock", action="store_true", help="Use mock endpoint instead of live"
+    )
     return parser.parse_args()
 
 
@@ -95,7 +103,7 @@ def main():
     args = parse_args()
 
     if args.message:
-        process_message(args.message)
+        process_message(args.message, use_mock=args.mock)
         return
 
     while True:
@@ -103,7 +111,7 @@ def main():
             message = input("> ")
             if message.lower() in {"exit", "quit"}:
                 break
-            process_message(message)
+            process_message(message, use_mock=args.mock)
         except KeyboardInterrupt:
             print("\n[red]Exiting...[/red]")
             break

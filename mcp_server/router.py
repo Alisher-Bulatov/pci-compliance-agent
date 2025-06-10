@@ -65,10 +65,21 @@ async def ask_mock_full_handler(payload: AskRequest):
             {"type": "token", "text": "response."},
             {
                 "type": "tool_result",
-                "result": {
-                    "id": "1.1.2",
-                    "text": "Mocked requirement comparison.",
-                    "tags": ["network", "policy"],
+                "text": {
+                    "status": "success",
+                    "tool_name": "compare_requirements",
+                    "result": [
+                        {
+                            "id": "1.1.2",
+                            "text": "Mocked firewall requirement.",
+                            "tags": ["network", "firewall"],
+                        },
+                        {
+                            "id": "12.5.1",
+                            "text": "Mocked compliance responsibility.",
+                            "tags": ["compliance"],
+                        },
+                    ],
                 },
             },
             {"type": "message", "content": "This is a follow-up message."},
