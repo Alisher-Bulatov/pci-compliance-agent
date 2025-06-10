@@ -82,7 +82,7 @@ async def ask_mock_full_handler(payload: AskRequest):
                     ],
                 },
             },
-            {"type": "message", "content": "This is a follow-up message."},
+            {"type": "token", "text": "This is a follow-up message."},
         ]:
             yield json.dumps(item) + "\n"
 
