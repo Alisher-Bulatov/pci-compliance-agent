@@ -1,4 +1,7 @@
 import json
+import asyncio
+import random
+import time
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -52,38 +55,72 @@ def ask_mock_handler(request):
 # 🔹 POST /ask_mock_full — mock JSON ND streaming (structured events for CLI/frontend dev)
 @router.post("/ask_mock_full")
 async def ask_mock_full_handler(payload: AskRequest):
-    _message = payload.message  # optionally echo/use it
+    _message = payload.message
 
     async def stream():
-        for item in [
-            {"type": "stage", "label": "Retrieving related requirements"},
-            {"type": "stage", "label": "Thinking..."},
-            {"type": "token", "text": "This "},
-            {"type": "token", "text": "is "},
-            {"type": "token", "text": "a "},
-            {"type": "token", "text": "mock "},
-            {"type": "token", "text": "response."},
+        start = time.perf_counter()
+
+        yield json.dumps(
+            {"type": "stage", "label": "Retrieving related requirements"}
+        ) + "\n"
+        await asyncio.sleep(random.uniform(0.1, 0.3))
+
+        yield json.dumps({"type": "stage", "label": "Thinking..."}) + "\n"
+        await asyncio.sleep(random.uniform(0.1, 0.3))
+
+        for token in ["This ", "is ", "a ", "mock ", "response."]:
+            yield json.dumps({"type": "token", "text": token}) + "\n"
+            await asyncio.sleep(random.uniform(0.05, 0.2))
+
+        # Randomized tool result
+        sample_results = [
+            {
+                "id": "1.1.2",
+                "text": "Mocked firewall requirement.",
+                "tags": random.sample(["network", "firewall", "infrastructure"], k=2),
+            },
+            {
+                "id": "12.5.1",
+                "text": "Mocked compliance responsibility.",
+                "tags": random.sample(["compliance", "management", "oversight"], k=2),
+            },
+        ]
+        random.shuffle(sample_results)
+
+        yield json.dumps(
             {
                 "type": "tool_result",
                 "text": {
                     "status": "success",
                     "tool_name": "compare_requirements",
-                    "result": [
-                        {
-                            "id": "1.1.2",
-                            "text": "Mocked firewall requirement.",
-                            "tags": ["network", "firewall"],
-                        },
-                        {
-                            "id": "12.5.1",
-                            "text": "Mocked compliance responsibility.",
-                            "tags": ["compliance"],
-                        },
-                    ],
+                    "result": sample_results,
                 },
-            },
-            {"type": "token", "text": "This is a follow-up message."},
-        ]:
-            yield json.dumps(item) + "\n"
+            }
+        ) + "\n"
+        await asyncio.sleep(random.uniform(0.1, 0.2))
+
+        # Blank line for readability before follow-up
+        yield json.dumps({"type": "token", "text": "\n"}) + "\n"
+
+        # Randomized follow-up message
+        followups = [
+            "Hope that helps clarify your query.",
+            "Let me know if you'd like to compare more.",
+            "This should give you a quick overview.",
+            "You're doing great — feel free to explore further.",
+        ]
+        followup_phrase = random.choice(followups)
+        for word in followup_phrase.split():
+            yield json.dumps({"type": "token", "text": word + " "}) + "\n"
+            await asyncio.sleep(random.uniform(0.05, 0.15))
+
+        # Final info event
+        elapsed = time.perf_counter() - start
+        yield json.dumps(
+            {
+                "type": "info",
+                "message": f"Mock response completed in {elapsed:.2f} seconds",
+            }
+        ) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
