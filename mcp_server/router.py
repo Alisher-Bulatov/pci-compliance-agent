@@ -14,11 +14,11 @@ router = APIRouter()
 
 # 🔹 GET /ask — Raw LLM response (for EventSource/browser dev)
 @router.get("/ask")
-def ask_stream_handler(request):
+async def ask_stream_handler(request):
     message = request.query_params.get("message", "")
 
-    def event_stream():
-        for token in query_llm(message, stream=True):
+    async def event_stream():
+        async for token in query_llm(message, stream=True):
             yield f"data: {token}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
