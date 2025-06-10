@@ -23,6 +23,9 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 - **CLI Chat Interface**  
   Launch via `cli.py` to start an interactive, conversational session with the assistant.
 
+- **Tool Auto-Discovery**  
+  The agent dynamically detects available tools and routes commands accordingly.
+
 ---
 
 ## 🗂️ Project Structure
@@ -40,6 +43,9 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 │   └── followup_template.txt
 │
 ├── cli.py                        # CLI entry point for interactive chat
+├── docs/                         # Parsed PCI DSS requirements and taxonomy
+│   ├── requirement_index.json
+│   ├── parsed_requirements.md
 │
 ├── data/                         # Vector index and document chunks
 │   ├── pci_chunks.txt
@@ -64,6 +70,8 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 │   ├── compare_requirements.py
 │   └── recommend_tool.py
 │
+├── cli.log                       # CLI log output
+├── .gitignore                    # Git ignore rules
 ├── requirements.txt              # Python dependencies
 ├── .pylintrc                     # Pylint config
 ├── .pre-commit-config.yaml       # Pre-commit hook config
@@ -98,6 +106,8 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 ---
 
 ## 🧠 What the Agent Can Do
+
+- 🧪 **Test easily** using mock endpoints (`/ask_mock`, `/ask_mock_full`) for UI or CLI without full backend.
 
 - 🔍 **Understand** vague queries like “Help me with encryption”
 - 📑 **Retrieve** exact PCI DSS requirement text by ID
@@ -164,6 +174,20 @@ I already know 3.2.1 is about not storing sensitive auth data, but what else sho
 ```
 
 ---
+
+## ❓ Troubleshooting
+
+**Q: CLI doesn't respond or crashes on startup?**  
+A: Ensure the backend server is running (`uvicorn mcp_server.main:app --reload`). Or use `/ask_mock_full` for mock mode.
+
+**Q: Vector index not found?**  
+A: Run:
+```bash
+python scripts/build_index.py
+```
+
+**Q: LLM connection refused?**  
+A: Make sure your local model (e.g., Ollama) is running.
 
 ## 📜 License
 
