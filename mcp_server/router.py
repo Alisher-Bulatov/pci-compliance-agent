@@ -2,7 +2,7 @@ import json
 import asyncio
 import random
 import time
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -15,7 +15,7 @@ router = APIRouter()
 
 # 🔹 GET /ask — Raw LLM response (for EventSource/browser dev)
 @router.get("/ask")
-async def ask_stream_handler(request):
+async def ask_stream_handler(request: Request):
     message = request.query_params.get("message", "")
 
     async def event_stream():
@@ -43,7 +43,7 @@ async def ask_full_handler(payload: AskRequest):
 
 # 🔹 GET /ask_mock — mock LLM response (for EventSource/browser dev)
 @router.get("/ask_mock")
-def ask_mock_handler(request):
+def ask_mock_handler(request: Request):
     _message = request.query_params.get("message", "")
 
     def event_stream():
