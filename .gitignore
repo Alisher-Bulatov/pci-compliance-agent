@@ -29,11 +29,6 @@ coverage.xml
 .coverage
 htmlcov/
 
-# Local vector store and retrieval data
-data/*.faiss
-data/*.pkl
-data/*.txt
-
 # IDE/editor configs
 .vscode/
 .idea/
