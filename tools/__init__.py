@@ -1,10 +1,10 @@
 import importlib
 import inspect
+import logging
 import pkgutil
 from typing import Dict
-import logging
-from pydantic import BaseModel
 
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
