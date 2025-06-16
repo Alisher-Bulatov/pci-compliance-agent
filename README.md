@@ -4,7 +4,7 @@ This project is a document-aware assistant for PCI DSS (Payment Card Industry Da
 It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool execution to help users understand and interact with PCI DSS requirements through transparent, structured reasoning and tool-based execution.
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
-![License](https://img.shields.io/badge/license-Unlicensed-lightgrey)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Build](https://img.shields.io/badge/build-passing-brightgreen)
 
 ---
@@ -220,4 +220,4 @@ A: Make sure your local model (e.g., Ollama) is running.
 
 ## 📜 License
 
-None
+This project is licensed under the [Apache License 2.0](LICENSE).

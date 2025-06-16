@@ -2,7 +2,12 @@ import importlib
 import inspect
 import pkgutil
 from typing import Dict
+import logging
 from pydantic import BaseModel
+
+
+logger = logging.getLogger(__name__)
+
 
 TOOL_REGISTRY: Dict[str, Dict[str, object]] = {}
 
@@ -15,7 +20,7 @@ def load_tools():
         try:
             module = importlib.import_module(f"tools.{module_name}")
         except Exception as e:
-            print(f"⚠️ Failed to import tools.{module_name}: {e}")
+            logger.warning(f"⚠️ Failed to import tools.{module_name}: {e}")
             continue
 
         input_schema = getattr(module, "InputSchema", None)
