@@ -4,6 +4,7 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from functools import lru_cache
+import os
 
 # Thread locks to prevent race condition on first load
 _index_lock = threading.Lock()
@@ -12,13 +13,17 @@ _embedder_lock = threading.Lock()
 
 
 @lru_cache(maxsize=1)
-def get_index(path="data/pci_index.faiss"):
+def get_index(path=None):
+    if path is None:
+        path = os.getenv("FAISS_INDEX_PATH", "data/pci_index.faiss")
     with _index_lock:
         return faiss.read_index(path)
 
 
 @lru_cache(maxsize=1)
-def get_mapping(path="data/mapping.pkl"):
+def get_mapping(path=None):
+    if path is None:
+        path = os.getenv("FAISS_MAPPING_PATH", "data/mapping.pkl")
     with _mapping_lock:
         with open(path, "rb") as f:
             return pickle.load(f)
