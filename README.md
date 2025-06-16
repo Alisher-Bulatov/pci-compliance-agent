@@ -70,6 +70,9 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 │   ├── compare_requirements.py
 │   └── recommend_tool.py
 │
+├── tests/                        # Unit and integration tests
+│   └── test_tool_call_parser.py
+│
 ├── cli.log                       # CLI log output
 ├── .gitignore                    # Git ignore rules
 ├── requirements.txt              # Python dependencies
