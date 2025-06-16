@@ -139,6 +139,8 @@ Optional tools:
 
 ## 🔧 Setup Notes
 
+- To customize the model or backend URL, use the `LLM_MODEL` and `LLM_API_URL` environment variables.
+
 - This project assumes a local Ollama or similar LLM backend is running.
 - For vector search, ensure `pci_chunks.txt` and `pci_index.faiss` exist in `./data/`. If not, run:
 
@@ -147,6 +149,28 @@ python scripts/build_index.py
 ```
 
 ---
+
+---
+
+## ⚙️ Environment Variables
+
+By default, the agent sends prompts to a local LLM endpoint. You can override the model and URL by setting the following environment variables:
+
+| Variable       | Description                                   | Default Value                                         |
+|----------------|-----------------------------------------------|-------------------------------------------------------|
+| `LLM_API_URL`  | URL of the LLM backend                        | `http://localhost:11434/api/generate`                |
+| `LLM_MODEL`    | Model identifier passed to the backend        | `mistral:7b-instruct-v0.3-q4_K_M`                    |
+
+You can define them in your shell before launching the CLI:
+
+```bash
+export LLM_API_URL="http://localhost:11434/api/generate"
+export LLM_MODEL="mistral:7b-instruct-v0.3-q4_K_M"
+python cli.py
+```
+
+Or in `.env` if you’re using `python-dotenv` (optional).
+
 
 ## 🤝 Contributing
 

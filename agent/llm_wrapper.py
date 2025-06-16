@@ -1,7 +1,16 @@
 # agent/llm_wrapper.py
 import json
+import os
 from typing import AsyncGenerator, Union
 import httpx
+
+
+def get_env(var_name: str, default: str) -> str:
+    return os.getenv(var_name, default)
+
+
+LLM_API_URL = get_env("LLM_API_URL", "http://localhost:11434/api/generate")
+LLM_MODEL = get_env("LLM_MODEL", "mistral:7b-instruct-v0.3-q4_K_M")
 
 
 async def query_llm(
@@ -10,20 +19,18 @@ async def query_llm(
     timeout: int = 10,
     max_retries: int = 3,
 ) -> Union[str, AsyncGenerator[str, None]]:
-    url = "http://localhost:11434/api/generate"
     payload = {
-        "model": "mistral:7b-instruct-v0.3-q4_K_M",
+        "model": LLM_MODEL,
         "prompt": prompt,
         "stream": stream,
         "options": {"temperature": 0.3, "num_predict": 400},
     }
 
     if not stream:
-        # Non-streaming: simple POST
         async with httpx.AsyncClient(timeout=timeout) as client:
             for attempt in range(max_retries):
                 try:
-                    response = await client.post(url, json=payload)
+                    response = await client.post(LLM_API_URL, json=payload)
                     response.raise_for_status()
                     return (await response.json()).get("response", "")
                 except httpx.RequestError as e:
@@ -33,12 +40,13 @@ async def query_llm(
                         ) from e
         return ""
 
-    # Streaming path: define generator inside the client scope
     async def token_generator() -> AsyncGenerator[str, None]:
         for attempt in range(max_retries):
             try:
                 async with httpx.AsyncClient(timeout=timeout) as client:
-                    async with client.stream("POST", url, json=payload) as response:
+                    async with client.stream(
+                        "POST", LLM_API_URL, json=payload
+                    ) as response:
                         response.raise_for_status()
                         async for line in response.aiter_lines():
                             if line:
@@ -46,7 +54,7 @@ async def query_llm(
                                 token = data.get("response", "")
                                 if token:
                                     yield token
-                break  # if successful, exit retry loop
+                break
             except httpx.RequestError as e:
                 if attempt == max_retries - 1:
                     raise RuntimeError(
