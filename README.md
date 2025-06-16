@@ -95,12 +95,16 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 
 3. **Run the CLI interface**:
    ```bash
-   python cli.py
+   # Optional: set MCP server URL if not running on localhost:8000
+export MCP_API_URL="http://<your-mcp-host>:<port>"
+
+python cli.py
    ```
 
    Or test using the mock backend:
    ```bash
-   python cli.py --mock -m "Compare 1.1.2 and 12.5.1"
+   export MCP_API_URL="http://<your-mcp-host>:<port>"
+python cli.py --mock -m "Compare 1.1.2 and 12.5.1"
    ```
 
 4. **Exit** with:
@@ -158,6 +162,7 @@ By default, the agent sends prompts to a local LLM endpoint. You can override th
 
 | Variable       | Description                                   | Default Value                                         |
 |----------------|-----------------------------------------------|-------------------------------------------------------|
+| `MCP_API_URL`   | URL of the MCP backend for tool execution            | `http://localhost:8000`    |
 | `LLM_API_URL`  | URL of the LLM backend                        | `http://localhost:11434/api/generate`                |
 | `LLM_MODEL`    | Model identifier passed to the backend        | `mistral:7b-instruct-v0.3-q4_K_M`                    |
 
@@ -166,6 +171,10 @@ You can define them in your shell before launching the CLI:
 ```bash
 export LLM_API_URL="http://localhost:11434/api/generate"
 export LLM_MODEL="mistral:7b-instruct-v0.3-q4_K_M"
+export MCP_API_URL="http://localhost:8000"
+# Optional: set MCP server URL if not running on localhost:8000
+export MCP_API_URL="http://<your-mcp-host>:<port>"
+
 python cli.py
 ```
 

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from agent.models.requirement import RequirementEntry, RequirementOutput
 
 import httpx
+import os
 import asyncio
 
 
@@ -22,7 +23,8 @@ async def fetch_requirement(req_id: str) -> RequirementEntry:
         }
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(
-                "http://localhost:8000/tool_call", json=payload
+                f"{os.getenv('MCP_API_URL', 'http://localhost:8000')}/tool_call",
+                json=payload,
             )
             response.raise_for_status()
             outer = response.json().get("result", {})

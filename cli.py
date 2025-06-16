@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import requests
 import time
 import logging
@@ -56,9 +57,9 @@ def process_message(message: str, use_mock=False):
     try:
         start = time.time()
         url = (
-            "http://localhost:8000/ask_mock_full"
+            f"{os.getenv('MCP_API_URL', 'http://localhost:8000')}/ask_mock_full"
             if use_mock
-            else "http://localhost:8000/ask_full"
+            else f"{os.getenv('MCP_API_URL', 'http://localhost:8000')}/ask_full"
         )
         response = requests.post(
             url,
