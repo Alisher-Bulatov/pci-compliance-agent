@@ -165,6 +165,8 @@ By default, the agent sends prompts to a local LLM endpoint. You can override th
 | `MCP_API_URL`   | URL of the MCP backend for tool execution            | `http://localhost:8000`    |
 | `LLM_API_URL`  | URL of the LLM backend                        | `http://localhost:11434/api/generate`                |
 | `LLM_MODEL`    | Model identifier passed to the backend        | `mistral:7b-instruct-v0.3-q4_K_M`                    |
+| `FAISS_INDEX_PATH`   | Path to FAISS index file for document retrieval    | `data/pci_index.faiss`     |
+| `FAISS_MAPPING_PATH` | Path to mapping.pkl file used with FAISS           | `data/mapping.pkl`         |
 
 You can define them in your shell before launching the CLI:
 
@@ -172,6 +174,8 @@ You can define them in your shell before launching the CLI:
 export LLM_API_URL="http://localhost:11434/api/generate"
 export LLM_MODEL="mistral:7b-instruct-v0.3-q4_K_M"
 export MCP_API_URL="http://localhost:8000"
+export FAISS_INDEX_PATH="data/custom_index.faiss"
+export FAISS_MAPPING_PATH="data/custom_mapping.pkl"
 # Optional: set MCP server URL if not running on localhost:8000
 export MCP_API_URL="http://<your-mcp-host>:<port>"
 
