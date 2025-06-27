@@ -193,7 +193,7 @@ Or in `.env` if you’re using `python-dotenv` (optional).
 Clone, set up a virtualenv, install deps, and open PRs or issues.
 
 ```bash
-git clone (https://github.com/Alisher-Bulatov/pci-compliance-agent)
+git clone https://github.com/Alisher-Bulatov/pci-compliance-agent
 cd pci-compliance-agent
 python -m venv venv
 source venv/bin/activate
