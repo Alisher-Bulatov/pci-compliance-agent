@@ -61,9 +61,9 @@ async def ask_mock_full_handler(payload: AskRequest):
     async def stream():
         start = time.perf_counter()
 
-        yield json.dumps(
-            {"type": "stage", "label": "Retrieving related requirements"}
-        ) + "\n"
+        #yield json.dumps(
+        #    {"type": "stage", "label": "Retrieving related requirements"}
+        #) + "\n"
         await asyncio.sleep(random.uniform(0.1, 0.3))
 
         yield json.dumps({"type": "stage", "label": "Thinking..."}) + "\n"

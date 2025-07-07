@@ -10,7 +10,7 @@ retriever = PCIDocumentRetriever()
 
 
 async def run_full_pipeline(message: str):
-    yield {"type": "stage", "label": "Retrieving related requirements"}
+    #yield {"type": "stage", "label": "Retrieving related requirements"}
     try:
         context_chunks = retriever.retrieve(message, k=3)
     except (RuntimeError, ValueError, OSError) as e:

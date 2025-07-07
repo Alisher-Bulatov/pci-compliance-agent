@@ -24,6 +24,15 @@ function App() {
     () => (localStorage.getItem('chatMode') as 'mock' | 'live') || 'mock'
   );
   const [tokenBuffer, setTokenBuffer] = useState('');
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const stopStream = () => {
+    if (controllerRef.current) {
+      controllerRef.current.abort();
+      controllerRef.current = null;
+      setLoading(false);
+    }
+  };
   const latestMessageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -54,10 +63,13 @@ function App() {
         ? 'http://localhost:8000/ask_full'
         : 'http://localhost:8000/ask_mock_full';
 
+    const controller = new AbortController();
+    controllerRef.current = controller;
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: input })
+      body: JSON.stringify({ message: input }),
+      signal: controller.signal
     });
 
     const reader = response.body?.getReader();
@@ -189,20 +201,42 @@ function App() {
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
           placeholder="Ask something like: Compare 1.1.2 and 12.5.1"
         />
-        <button
-          className="chat-button"
-          onClick={sendMessage}
-          disabled={loading}
-        >
-          {loading ? (
-            <>
-              <div className="spinner" />
-              Sending...  
-            </>
-          ) : (
-            'Send'
-          )}
-        </button>
+        
+{!loading ? (
+  
+<button
+  className={"chat-button" + (loading ? " stop" : "")}
+  onClick={loading ? stopStream : sendMessage}
+  title={loading ? "Stop streaming" : "Send message"}
+  disabled={loading && false}  // keep button enabled for stopping
+>
+  {loading ? (
+    <>
+      ⏹ Streaming<span className="dot-pulse" />
+    </>
+  ) : (
+    <>
+      ▶ Send
+    </>
+  )}
+</button>
+
+
+) : (
+  <>
+    <button className="chat-button" disabled>
+      Responding...
+    </button>
+    <button
+      className="chat-button stop"
+      onClick={stopStream}
+      title="Stop response"
+    >
+      ⏹ Stop<span className="dot-pulse" />
+    </button>
+  </>
+)}
+
       </div>
 
       <div>

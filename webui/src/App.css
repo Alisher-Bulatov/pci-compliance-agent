@@ -110,3 +110,63 @@ h2 {
     transform: translateY(0);
   }
 }
+
+
+.chat-button.stop {
+  background: #dc3545;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.chat-button.stop:hover {
+  background: #bb2d3b;
+}
+
+.dot-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background-color: #6ec1ff;
+  animation: pulse 0.8s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.5); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+
+.chat-button.stop {
+  background: #dc3545;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.chat-button.stop:hover {
+  background: #bb2d3b;
+}
+
+.chat-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dot-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background-color: #6ec1ff;
+  animation: pulse 0.8s infinite ease-in-out;
+  vertical-align: middle;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.5); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.6; }
+}

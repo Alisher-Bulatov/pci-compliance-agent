@@ -38,10 +38,12 @@ def build_db():
     cursor.execute(CREATE_TABLE_SQL)
 
     with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
-        for line in f:
+        for i, line in enumerate(f, 1):
             req_id, text = parse_line(line.strip())
             if req_id and text:
                 cursor.execute(INSERT_SQL, (req_id, text, ""))
+            else:
+                print(f"⚠️ Skipped malformed line {i}: {line.strip()}")
 
     conn.commit()
     conn.close()

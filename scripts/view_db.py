@@ -1,10 +1,16 @@
 import sqlite3
+from pathlib import Path
 
-conn = sqlite3.connect("data/pci_requirements.db")
+# Define path to the SQLite DB
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "pci_requirements.db"
+
+# Connect and query
+conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
-cursor.execute("SELECT id, text FROM requirements WHERE id IN ('1.1.2', '12.5.1')")
-results = cursor.fetchall()
+cursor.execute("SELECT id, text FROM requirements ORDER BY id")
+rows = cursor.fetchall()
 conn.close()
 
-for row in results:
+# Print all requirements
+for row in rows:
     print(row)
