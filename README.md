@@ -218,12 +218,12 @@ Try these inside the CLI:
 - How do 12.2 and 12.5.1 relate to each other?
 
 #### Interpretive
-- Is 3.4 about encryption or access control?
+- Is 3.4 about encryption or access control? x
 - What does 10.2.1 mean in plain English?
-- Help me understand why 1.1.2 matters for security
+- Help me understand why 1.1.2 matters for security x
 
 #### Thematic/Contextual
-- Which requirement talks about password complexity?
+- Which requirement talks about password complexity? x
 - What should I consider when storing cryptographic keys?
 - Can you list requirements related to firewall rules?
 

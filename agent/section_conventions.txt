@@ -1,0 +1,15 @@
+---
+
+📘 SECTION ID CONVENTIONS
+
+In PCI DSS, requirement identifiers follow this format:
+- A full requirement ID has **three parts** (e.g., `3.4.1`) and refers to a **specific rule**.
+- A **section ID** has **two parts** (e.g., `3.4`) and refers to a **group of related requirements**.
+- A **domain ID** has just one part (e.g., `3`) and refers to a **requirement family**.
+
+When the user refers to a **section** (like “3.4”), you must use `get_section` to retrieve all the child requirements grouped under that section.
+
+Examples:
+- “What does 3.4 cover?” → get_section
+- “Is 3.4 about access control?” → get_section
+- “Show me what 3.4.1 says.” → get_requirement_text
