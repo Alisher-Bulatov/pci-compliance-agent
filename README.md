@@ -213,7 +213,7 @@ Try these inside the CLI:
 - What's written under 8.2.3?
 
 #### Comparisons
-- Compare requirements 3.2.1 and 3.4
+- Compare requirements 3.2.1 and 3.4.1
 - What’s the difference between 1.1.2 and 1.2.1?
 - How do 12.2 and 12.5.1 relate to each other?
 
