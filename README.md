@@ -206,32 +206,31 @@ pip install -r requirements.txt
 
 Try these inside the CLI:
 
-```text
-#### ✅ Basic Lookups
+
+#### Basic Lookups
 - What does 3.2.1 say?
 - Can you show me the wording of requirement 1.2.1?
 - What's written under 8.2.3?
 
-#### ✅ Comparisons
+#### Comparisons
 - Compare requirements 3.2.1 and 3.4
 - What’s the difference between 1.1.2 and 1.2.1?
 - How do 12.2 and 12.5.1 relate to each other?
 
-#### ✅ Interpretive
+#### Interpretive
 - Is 3.4 about encryption or access control?
 - What does 10.2.1 mean in plain English?
 - Help me understand why 1.1.2 matters for security
 
-#### ✅ Thematic/Contextual
+#### Thematic/Contextual
 - Which requirement talks about password complexity?
 - What should I consider when storing cryptographic keys?
 - Can you list requirements related to firewall rules?
 
-#### ✅ Robust Edge Tests
+#### Robust Edge Tests
 - Is 3.2.1 about logging?
 - I already know 3.2.1 is about auth data, but what else should I be aware of?
 - If I want to restrict network access, which requirement should I look at?
-```
 
 ---
 
