@@ -1,42 +1,112 @@
-#root {
-  max-width: 1280px;
+/* Global Layout */
+.app-container {
+  width: 800px;
   margin: 0 auto;
   padding: 2rem;
-  text-align: center;
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #181818;
+  color: #f0f0f0;
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* Header */
+h2 {
+  color: #6ec1ff;
+  font-size: 1.6rem;
+  margin-bottom: 1rem;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
+/* Chat Input and Button */
+.chat-input {
+  flex-grow: 1;
+  padding: 0.5rem;
+  background: #222;
+  color: white;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.chat-button {
+  padding: 0.5rem 1rem;
+  background: #0d6efd;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+/* Stage Blocks */
+.stage-block {
+  padding: 1rem;
+  margin-bottom: 2rem;
+  background: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+
+/* Tool Result & Tool Call Formatting */
+.tool-box {
+  font-family: monospace;
+  white-space: pre-wrap;
+  padding: 0.75em;
+  border-radius: 4px;
+  margin-bottom: 0.5em;
+}
+
+.tool-call {
+  background: #111;
+  color: #9ec7ff;
+}
+
+.tool-result {
+  background: #1c1c1c;
+  color: #abf7b1;
+}
+
+/* Info and Error */
+.info {
+  color: gray;
+  font-style: italic;
+}
+
+.error {
+  color: red;
+}
+
+/* Spinner Animation */
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ccc;
+  border-top: 2px solid #6ec1ff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+/* Fade-in animation for new content */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
   }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
