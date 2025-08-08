@@ -206,31 +206,31 @@ pip install -r requirements.txt
 
 Try these inside the CLI:
 
+### 1. Direct retrieval tests (`get_requirement_text`)
+- What does requirement 4.2 say?
+- Show me the exact text for 12.5.1
+- Read me 8.2.3 in full
 
-#### Basic Lookups
-- What does 3.2.1 say?
-- Can you show me the wording of requirement 1.2.1?
-- What's written under 8.2.3?
+### 2. Topic search tests (`search_by_topic`)
+- Find all requirements about multi-factor authentication
+- Which requirements are related to wireless security?
+- List PCI DSS rules that deal with firewall configuration
 
-#### Comparisons
-- Compare requirements 3.2.1 and 3.4.1
-- What’s the difference between 1.1.2 and 1.2.1?
-- How do 12.2 and 12.5.1 relate to each other?
+### 3. Comparison tests (`compare_requirements`)
+- Compare 1.1.2 with 1.2.1
+- How does 3.2.1 differ from 3.4?
+- What’s the difference between 10.2.1 and 10.4?
 
-#### Interpretive
-- Is 3.4 about encryption or access control? x
-- What does 10.2.1 mean in plain English?
-- Help me understand why 1.1.2 matters for security x
+### 4. Interpretive reasoning tests
+- Is 3.4 more about encryption or about access control?
+- Explain 5.4 in simple language
+- Why is 1.1.2 important for network security?
 
-#### Thematic/Contextual
-- Which requirement talks about password complexity? x
-- What should I consider when storing cryptographic keys?
-- Can you list requirements related to firewall rules?
+### 5. Mixed / ambiguous to trigger tool choice
+- Tell me about key management requirements
+- Which requirement talks about password complexity?
+- How should I restrict network access according to PCI DSS?
 
-#### Robust Edge Tests
-- Is 3.2.1 about logging?
-- I already know 3.2.1 is about auth data, but what else should I be aware of?
-- If I want to restrict network access, which requirement should I look at?
 
 ---
 

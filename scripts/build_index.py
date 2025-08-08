@@ -1,4 +1,4 @@
-import re
+import json
 import pickle
 from pathlib import Path
 
@@ -7,9 +7,9 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 # === Configuration ===
-SOURCE_FILE = "data/pci_chunks.txt"
-INDEX_FILE = "data/pci_index.faiss"
-MAPPING_FILE = "data/mapping.pkl"
+JSON_FILE = Path("data/pciRequirements.json")
+INDEX_FILE = Path("data/pci_index.faiss")
+MAPPING_FILE = Path("data/mapping.pkl")
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 # === Simple tag rules ===
@@ -45,30 +45,50 @@ def extract_tags(text: str) -> list[str]:
     return list(tag_set)
 
 
-def extract_id_and_text(raw_line: str) -> tuple[str | None, str | None]:
-    match = re.match(r"Requirement (\d[\d.]*)\s*:\s*(.+)", raw_line)
-    if match:
-        return match.group(1), match.group(2)
-    return None, None
+def parse_json_records(obj: dict) -> list[tuple[str, str]]:
+    """
+    Parse key/value pairs from pciRequirements.json -> list of (id, text).
+    Keys can be 'Requirement X' or 'Section X.Y'.
+    """
+    records = []
+    for key, val in obj.items():
+        if not isinstance(val, str):
+            continue
+        parts = key.split(maxsplit=1)
+        if len(parts) < 2:
+            continue
+        req_id = parts[1].strip()
+        text = val.strip()
+        if req_id and text:
+            records.append((req_id, text))
+    return records
 
 
-# === Load and parse data ===
-source_path = Path(SOURCE_FILE)
-lines = [
-    line.strip()
-    for line in source_path.read_text(encoding="utf-8").splitlines()
-    if line.strip()
-]
+# === Load data from JSON ===
+if not JSON_FILE.exists():
+    raise FileNotFoundError(f"❌ JSON file not found: {JSON_FILE}")
 
+data = json.loads(JSON_FILE.read_text(encoding="utf-8"))
+records = parse_json_records(data)
+
+if not records:
+    raise ValueError("❌ No valid requirement records found in JSON.")
+
+# Remove duplicate IDs while preserving order
+seen = set()
+deduped = []
+for req_id, req_text in records:
+    if req_id in seen:
+        continue
+    seen.add(req_id)
+    deduped.append((req_id, req_text))
+
+# Build mapping and text list
 mapping = {}
 texts = []
-for content in lines:
-    req_id, req_text = extract_id_and_text(content)
-    if not req_id:
-        continue
+for i, (req_id, req_text) in enumerate(deduped):
     tag_list = extract_tags(req_text)
-    entry = {"id": req_id, "text": req_text, "tags": tag_list}
-    mapping[len(mapping)] = entry
+    mapping[i] = {"id": req_id, "text": req_text, "tags": tag_list}
     texts.append(f"{req_id}: {req_text}")
 
 # === Embed and index ===
@@ -77,12 +97,12 @@ embeddings = np.asarray(embedder.encode(texts, show_progress_bar=True), dtype="f
 embedding_dim = embeddings.shape[1]
 
 index = faiss.IndexFlatL2(embedding_dim)
-# pylint: disable=no-value-for-parameter
 index.add(embeddings)
 
 # === Save outputs ===
-faiss.write_index(index, INDEX_FILE)
+INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+faiss.write_index(index, str(INDEX_FILE))
 with open(MAPPING_FILE, "wb") as f:
     pickle.dump(mapping, f)
 
-print(f"✅ Rebuilt index with {len(mapping)} entries.")
+print(f"✅ Rebuilt index with {len(mapping)} entries from JSON.")

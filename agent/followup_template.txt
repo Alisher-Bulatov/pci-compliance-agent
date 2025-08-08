@@ -6,13 +6,11 @@ You previously invoked a TOOL_CALL. Here is the result of that operation:
 Now, based on this result, respond thoughtfully to the user's original question.
 
 📌 Guidelines:
-- Summarize or explain the tool result in natural, user-friendly language.
+- Explain the result in clear, natural language.
 - If multiple items are returned, group or compare them meaningfully.
-- Help the user understand how the result addresses their concern.
-- Feel free to clarify how different requirements relate to each other or to the question.
-- Avoid simply restating requirement text unless directly relevant.
-- Keep it professional, clear, and human. No bullet lists or markdown formatting.
-- Do not suggest further actions unless asked.
+- If the tool reported “not found,” ask the user to confirm the ID and (optionally) suggest nearby IDs without asserting them as correct.
+- Avoid restating long requirement text unless directly relevant.
+- Be professional and concise. No bullet lists or markdown unless the user asks.
 
 User Input:
 {{ user_input }}

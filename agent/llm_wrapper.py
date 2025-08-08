@@ -10,7 +10,7 @@ def get_env(var_name: str, default: str) -> str:
 
 
 LLM_API_URL = get_env("LLM_API_URL", "http://localhost:11434/api/generate")
-LLM_MODEL = get_env("LLM_MODEL", "mistral:7b-instruct-v0.3-q4_K_M")
+LLM_MODEL = get_env("LLM_MODEL", "qwen2.5:7b-instruct")
 
 
 async def query_llm(
