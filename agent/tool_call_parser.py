@@ -6,11 +6,11 @@ MAX_IDS = 50
 def _is_valid_pci_id(s: str) -> bool:
     """
     Valid PCI ID rules (no regex):
-      - First segment: integer 1..12 (no leading +/-, no decimals)
+      - First segment: integer 1..12
       - Then 0..3 dot-separated segments
-      - Each extra segment is 1..2 digits (00..99), but we keep it simple: 0..99 allowed
-      - Examples: 3, 10, 3.2, 3.2.1, 11.5.1.1
-      - Non-examples: 13, v4.0.1, 3.x, 0.1, 1.2.3.4.5
+      - Each extra segment is 1..2 digits
+      Examples: 3, 10, 3.2, 3.2.1, 11.5.1.1
+      Non-examples: 13, v4.0.1, 3.x, 0.1, 1.2.3.4.5
     """
     if not s or " " in s:
         return False
@@ -26,7 +26,7 @@ def _is_valid_pci_id(s: str) -> bool:
     if n0 < 1 or n0 > 12:
         return False
 
-    # Up to 3 more parts, each 1..2 digits (00–99 is tolerated; spec doesn't forbid 00 explicitly)
+    # Up to 3 more parts, each 1..2 digits
     tail = parts[1:]
     if len(tail) > 3:
         return False
@@ -53,9 +53,10 @@ def extract_tool_call(text: str):
 
     Accepts exactly one of:
       - "skip" (any case, surrounding whitespace allowed)
-      - get:["6.5","1.2.1"]    # batch IDs (JSON array of strings)
-      - get:"6.5"              # single ID (quoted string)
-      - search:"cryptographic key storage"  # single quoted string
+      - get:["6.5","1.2.1"]                # batch IDs (JSON array of strings)
+      - get:"6.5"                          # single ID (quoted string)
+      - get:"6.5","1.2.1"[,"..."]          # <-- tolerant CSV of quoted IDs (planner slop)
+      - search:"cryptographic key storage" # single quoted string
 
     Returns:
       - {"skip": True}  for skip
@@ -78,10 +79,12 @@ def extract_tool_call(text: str):
         raise ValueError("Planner output missing ':' and is not 'skip'")
 
     verb, payload = s.split(":", 1)
-    verb, payload = verb.strip(), payload.strip()
+    verb = verb.strip().lower()
+    # normalize smart quotes
+    payload = payload.strip().replace("“", '"').replace("”", '"')
 
     if verb == "get":
-        # Batch: get:["6.5","1.2.1"]
+        # Strict batch: get:["6.5","1.2.1"]
         if payload.startswith("["):
             try:
                 ids = json.loads(payload)
@@ -91,7 +94,6 @@ def extract_tool_call(text: str):
             if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
                 raise ValueError("get expects a JSON array of strings")
 
-            # strip whitespace inside elements, validate, dedupe, cap
             cleaned = []
             for x in ids:
                 x2 = x.strip()
@@ -100,6 +102,34 @@ def extract_tool_call(text: str):
                 if not _is_valid_pci_id(x2):
                     raise ValueError(f"Invalid PCI ID: {x2}")
                 cleaned.append(x2)
+
+            cleaned = _dedupe_preserve_order(cleaned)
+            if len(cleaned) > MAX_IDS:
+                raise ValueError(f"Too many IDs in get (>{MAX_IDS})")
+
+            return [{"tool_name": "get", "tool_input": {"ids": cleaned}}]
+
+        # Tolerant CSV of quoted IDs: get:"2.2","2.3"[,"..."]
+        if payload.startswith('"') and payload.endswith('"') and '","' in payload:
+            # split on commas and enforce each token is a quoted string
+            parts = [p.strip() for p in payload.split(",")]
+            ids = []
+            for part in parts:
+                if not (part.startswith('"') and part.endswith('"') and len(part) >= 2):
+                    raise ValueError("get CSV expects only quoted strings")
+                ids.append(part[1:-1].strip())
+
+            if not ids:
+                raise ValueError("get expects at least one ID")
+
+            # validate & dedupe
+            cleaned = []
+            for sid in ids:
+                if not sid:
+                    raise ValueError("get contains an empty ID")
+                if not _is_valid_pci_id(sid):
+                    raise ValueError(f"Invalid PCI ID: {sid}")
+                cleaned.append(sid)
 
             cleaned = _dedupe_preserve_order(cleaned)
             if len(cleaned) > MAX_IDS:
@@ -116,7 +146,7 @@ def extract_tool_call(text: str):
                 raise ValueError(f"Invalid PCI ID: {single_id}")
             return [{"tool_name": "get", "tool_input": {"ids": [single_id]}}]
 
-        raise ValueError('Invalid get payload. Use get:[...] or get:"id"')
+        raise ValueError('Invalid get payload. Use get:[...] or get:"id" or get:"id1","id2"')
 
     if verb == "search":
         # search:"cryptographic key storage"
@@ -124,13 +154,7 @@ def extract_tool_call(text: str):
             query = payload[1:-1].strip()
             if not query:
                 raise ValueError("search expects a non-empty quoted string")
-            # Soft sanity: discourage ID-like-only queries. Router should handle this,
-            # but this protects you if the planner glitches.
-            if _is_valid_pci_id(query):
-                # Still allow (your router rule should avoid this anyway), but you can tighten if desired.
-                pass
             return [{"tool_name": "search", "tool_input": {"query": query}}]
-
         raise ValueError('search expects a single quoted string, e.g. search:"topic"')
 
     raise ValueError(f"Unknown verb: {verb}")

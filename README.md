@@ -224,7 +224,6 @@ pip install -r requirements.txt
 - Which requirement covers time-synchronization mechanisms?
 - How should wireless environments be secured according to PCI DSS?
 
-
 ---
 
 ## ❓ Troubleshooting
