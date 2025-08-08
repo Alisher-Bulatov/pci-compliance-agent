@@ -1,108 +1,88 @@
-import json
+
+# build_index.py — Rebuild FAISS index **from SQLite** (SQLite = source of truth)
+import sqlite3
 import pickle
 from pathlib import Path
-
+import os
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-# === Configuration ===
-JSON_FILE = Path("data/pciRequirements.json")
-INDEX_FILE = Path("data/pci_index.faiss")
-MAPPING_FILE = Path("data/mapping.pkl")
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# === Config ===
+ROOT_DIR = Path(__file__).resolve().parent.parent  # go up from /scripts
+DATA_DIR = ROOT_DIR / "data"
+DB_FILE = DATA_DIR / "pci_requirements.db"
+INDEX_FILE = DATA_DIR / "pci_index.faiss"
+MAPPING_FILE = DATA_DIR / "mapping.pkl"
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
-# === Simple tag rules ===
-TAG_KEYWORDS = {
-    "encryption": [
-        "encrypt",
-        "cryptographic",
-        "cipher",
-        "key management",
-        "decryption",
-        "protect cardholder data",
-    ],
-    "authentication": [
-        "authentication",
-        "auth",
-        "login",
-        "password",
-        "PIN",
-        "biometric",
-    ],
-    "network": ["firewall", "router", "network", "packet", "traffic"],
-    "compliance": ["compliance", "audit", "responsibility"],
-    "storage": ["store", "storage", "retain", "save", "database"],
-}
+# Snippet length for mapping previews (kept short to discourage using mapping as full SoT)
+SNIPPET_CHARS = int(os.getenv("SNIPPET_CHARS", "220"))
 
+def _snippet(text: str, limit: int = SNIPPET_CHARS) -> str:
+    t = (text or "").strip().replace("\n", " ")
+    if len(t) <= limit:
+        return t
+    return t[:limit].rsplit(" ", 1)[0] + " …"
 
-def extract_tags(text: str) -> list[str]:
-    tag_set = set()
-    lowered = text.lower()
-    for tag, keywords in TAG_KEYWORDS.items():
-        if any(kw in lowered for kw in keywords):
-            tag_set.add(tag)
-    return list(tag_set)
-
-
-def parse_json_records(obj: dict) -> list[tuple[str, str]]:
-    """
-    Parse key/value pairs from pciRequirements.json -> list of (id, text).
-    Keys can be 'Requirement X' or 'Section X.Y'.
-    """
-    records = []
-    for key, val in obj.items():
-        if not isinstance(val, str):
+def load_rows():
+    if not DB_FILE.exists():
+        raise FileNotFoundError(f"SQLite DB not found: {DB_FILE}")
+    conn = sqlite3.connect(str(DB_FILE))
+    cur = conn.cursor()
+    cur.execute("SELECT id, text, tags FROM requirements ORDER BY id")
+    rows = cur.fetchall()
+    conn.close()
+    if not rows:
+        raise ValueError("No rows found in SQLite 'requirements' table.")
+    # Ensure uniqueness & canonical form (strip trailing dots/spaces)
+    seen = set()
+    out = []
+    for rid, text, tags in rows:
+        rid_norm = rid.strip().rstrip(".")
+        if rid_norm in seen:
             continue
-        parts = key.split(maxsplit=1)
-        if len(parts) < 2:
-            continue
-        req_id = parts[1].strip()
-        text = val.strip()
-        if req_id and text:
-            records.append((req_id, text))
-    return records
+        seen.add(rid_norm)
+        out.append((rid_norm, text, tags or ""))
+    return out
 
+def main():
+    rows = load_rows()
 
-# === Load data from JSON ===
-if not JSON_FILE.exists():
-    raise FileNotFoundError(f"❌ JSON file not found: {JSON_FILE}")
+    # Prepare training strings and mapping
+    texts = [f"{rid}: {text}" for rid, text, _ in rows]
 
-data = json.loads(JSON_FILE.read_text(encoding="utf-8"))
-records = parse_json_records(data)
+    # Build mapping with preview snippet; keep full text for convenience but sourced from SQLite
+    # (If you prefer NO full text in mapping, set INCLUDE_FULL_TEXT=0 in env.)
+    include_full = os.getenv("INCLUDE_FULL_TEXT", "1").lower() not in {"0","false","no"}
 
-if not records:
-    raise ValueError("❌ No valid requirement records found in JSON.")
+    mapping = {}
+    for i, (rid, text, tags_csv) in enumerate(rows):
+        tags = [t for t in (tags_csv or "").split(",") if t]
+        entry = {
+            "id": rid,
+            "snippet": _snippet(text),
+            "tags": tags,
+        }
+        if include_full:
+            entry["text"] = text
+        mapping[i] = entry
 
-# Remove duplicate IDs while preserving order
-seen = set()
-deduped = []
-for req_id, req_text in records:
-    if req_id in seen:
-        continue
-    seen.add(req_id)
-    deduped.append((req_id, req_text))
+    # Embed & index
+    embedder = SentenceTransformer(EMBEDDING_MODEL)
+    embeddings = np.asarray(embedder.encode(texts, show_progress_bar=True), dtype="float32")
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)
+    index.add(embeddings)
 
-# Build mapping and text list
-mapping = {}
-texts = []
-for i, (req_id, req_text) in enumerate(deduped):
-    tag_list = extract_tags(req_text)
-    mapping[i] = {"id": req_id, "text": req_text, "tags": tag_list}
-    texts.append(f"{req_id}: {req_text}")
+    # Save
+    INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+    faiss.write_index(index, str(INDEX_FILE))
+    with open(MAPPING_FILE, "wb") as f:
+        pickle.dump(mapping, f)
 
-# === Embed and index ===
-embedder = SentenceTransformer(EMBEDDING_MODEL)
-embeddings = np.asarray(embedder.encode(texts, show_progress_bar=True), dtype="float32")
-embedding_dim = embeddings.shape[1]
+    print(f"✅ Rebuilt FAISS from SQLite: {len(mapping)} entries -> {INDEX_FILE.name}, {MAPPING_FILE.name}")
+    print(f"   Model={EMBEDDING_MODEL}  IncludeFullText={include_full}  SnippetChars={SNIPPET_CHARS}")
 
-index = faiss.IndexFlatL2(embedding_dim)
-index.add(embeddings)
-
-# === Save outputs ===
-INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
-faiss.write_index(index, str(INDEX_FILE))
-with open(MAPPING_FILE, "wb") as f:
-    pickle.dump(mapping, f)
-
-print(f"✅ Rebuilt index with {len(mapping)} entries from JSON.")
+if __name__ == "__main__":
+    main()

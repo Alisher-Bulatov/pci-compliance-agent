@@ -1,16 +1,14 @@
-You previously invoked a TOOL_CALL. Here is the result of that operation:
+You previously invoked tools. Here are the observations (in order). Use them to answer the user's original question:
 
-→ Tool Result:
+→ Observations JSON:
 {{ tool_result }}
 
-Now, based on this result, respond thoughtfully to the user's original question.
-
-📌 Guidelines:
-- Explain the result in clear, natural language.
-- If multiple items are returned, group or compare them meaningfully.
-- If the tool reported “not found,” ask the user to confirm the ID and (optionally) suggest nearby IDs without asserting them as correct.
-- Avoid restating long requirement text unless directly relevant.
-- Be professional and concise. No bullet lists or markdown unless the user asks.
+Now produce a final answer that:
+- Explains the results clearly and concisely in plain language.
+- If multiple items were returned, groups or compares them meaningfully.
+- If a requested requirement was not found, explicitly say so and ask the user to confirm the ID (do NOT guess).
+- Avoid restating long requirement text unless directly necessary—quote only short, relevant excerpts.
+- Do not include any tool-internal metadata in the final answer.
 
 User Input:
 {{ user_input }}
