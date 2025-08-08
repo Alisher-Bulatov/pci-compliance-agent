@@ -1,7 +1,17 @@
 import json
 
 def extract_tool_call(text: str) -> dict:
-    """Extract the first complete JSON object or array from text."""
+    """
+    Extracts the first complete JSON object/array from the text, or detects 'skip'.
+    Returns:
+      - {"skip": True} if the model output is exactly 'skip' (case-insensitive, ignoring whitespace)
+      - Parsed JSON object otherwise
+    """
+    # 1) Direct skip detection
+    if text.strip().lower() == "skip":
+        return {"skip": True}
+
+    # 2) JSON extraction
     start = text.find("{")
     start_list = text.find("[")
     if start_list != -1 and (start_list < start or start == -1):
@@ -10,7 +20,6 @@ def extract_tool_call(text: str) -> dict:
         raise ValueError("Could not extract TOOL_CALL/TOOL_PLAN from LLM output.")
 
     depth = 0
-    in_list = text[start] == "["
     for idx in range(start, len(text)):
         char = text[idx]
         if char in "{[":
@@ -32,18 +41,19 @@ def normalize_actions(parsed_json):
     """
     Returns (actions_list, final_answer_or_None).
     Supports:
+      - {"skip": True}  → skip mode, no actions
       - single dict {tool_name, tool_input}
       - list of {tool_name, tool_input}
       - dict with 'actions': [...]
-      - dict with 'answer': <string>  (FINAL_ANSWER)
     """
+    # Handle skip case
+    if isinstance(parsed_json, dict) and parsed_json.get("skip") is True:
+        return [], None  # Skip = no actions, no final answer
+
     if isinstance(parsed_json, list):
         return parsed_json, None
 
     if isinstance(parsed_json, dict):
-        if "answer" in parsed_json:
-            return [], parsed_json["answer"]
-
         if "actions" in parsed_json and isinstance(parsed_json["actions"], list):
             return parsed_json["actions"], None
 

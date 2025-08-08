@@ -43,3 +43,4 @@ def test_no_json_present():
     text = "Nothing to see here."
     with pytest.raises(ValueError, match="Could not extract TOOL_CALL"):
         extract_tool_call(text)
+

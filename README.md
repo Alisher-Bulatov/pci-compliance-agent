@@ -18,7 +18,7 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
   Leverages structured prompts to determine whether to respond directly or call a tool. Enables reasoning and step-by-step execution.
 
 - **MCP Server (Modular Command Processor)**  
-  A FastAPI-based service that handles backend execution of tools such as `get_requirement_text`, `search_by_topic`, and `compare_requirements`.
+  A FastAPI-based service that handles backend execution of tools such as `get`, `search`, and `compare_requirements`.
 
 - **CLI Chat Interface**  
   Launch via `cli.py` to start an interactive, conversational session with the assistant.
@@ -65,8 +65,8 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 │   └── build_index.py
 │
 ├── tools/                        # Tool implementations
-│   ├── get_requirement_text.py
-│   ├── search_by_topic.py
+│   ├── get.py
+│   ├── search.py
 │   ├── compare_requirements.py
 │   └── recommend_tool.py
 │
@@ -204,32 +204,25 @@ pip install -r requirements.txt
 
 ## 🔍 Sample Prompts
 
-Try these inside the CLI:
+### 1. Direct retrieval tests (`get`)
+- What is written in requirement 6.5?
+- Give me the text of 2.3
+- Show the details for 10.6
 
-### 1. Direct retrieval tests (`get_requirement_text`)
-- What does requirement 4.2 say?
-- Show me the exact text for 12.5.1
-- Read me 8.2.3 in full
+### 2. Topic search tests (`search`)
+- Which PCI DSS rules address anti-phishing protections?
+- Find all requirements related to penetration testing
+- List the requirements about cryptographic key storage
 
-### 2. Topic search tests (`search_by_topic`)
-- Find all requirements about multi-factor authentication
-- Which requirements are related to wireless security?
-- List PCI DSS rules that deal with firewall configuration
+### 3. Interpretive reasoning tests
+- Is 3.2.1 focused on storage limitations or on transmission security?
+- Explain 9.5 in plain terms
+- Why is 1.5 critical for protecting the CDE?
 
-### 3. Comparison tests (`compare_requirements`)
-- Compare 1.1.2 with 1.2.1
-- How does 3.2.1 differ from 3.4?
-- What’s the difference between 10.2.1 and 10.4?
-
-### 4. Interpretive reasoning tests
-- Is 3.4 more about encryption or about access control?
-- Explain 5.4 in simple language
-- Why is 1.1.2 important for network security?
-
-### 5. Mixed / ambiguous to trigger tool choice
-- Tell me about key management requirements
-- Which requirement talks about password complexity?
-- How should I restrict network access according to PCI DSS?
+### 4. Mixed / ambiguous to trigger tool choice
+- Tell me about secure software development requirements
+- Which requirement covers time-synchronization mechanisms?
+- How should wireless environments be secured according to PCI DSS?
 
 
 ---
@@ -251,3 +244,4 @@ A: Make sure your local model (e.g., Ollama) is running.
 ## 📜 License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
+

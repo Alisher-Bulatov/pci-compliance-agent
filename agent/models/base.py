@@ -13,3 +13,4 @@ class BaseToolOutputSchema(BaseModel):
         if hasattr(self.result, "dict"):
             return self.result.dict()
         return self.result
+

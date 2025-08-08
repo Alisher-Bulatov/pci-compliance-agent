@@ -14,3 +14,4 @@ conn.close()
 # Print all requirements
 for row in rows:
     print(row)
+

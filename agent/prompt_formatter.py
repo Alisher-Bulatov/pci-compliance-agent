@@ -15,6 +15,11 @@ def format_prompt(
             "{{ user_input }}", user_input
         )
 
+    if template_type == "smalltalk":
+        template_path = Path("agent/smalltalk_template.txt")
+        template = template_path.read_text(encoding="utf-8")
+        return template.replace("{{ user_input }}", user_input)
+
     template_path = Path("agent/prompt_template.txt")
     template = template_path.read_text(encoding="utf-8")
     return (

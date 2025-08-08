@@ -166,3 +166,4 @@ app.add_middleware(
 - [ ] Mock everything using `/ask_mock_full` when needed  
 - [ ] Fallback gracefully on unknown types or JSON errors  
 - [ ] Enable CORS for local frontend testing
+

@@ -1,5 +1,4 @@
-
-"""Search for PCI DSS requirements related to a topic/keyword.
+"""Search PCI DSS requirements by topic using the user's own words as the query.
 
 Enriches top-K FAISS hits with authoritative text/tags from SQLite (single source of truth).
 If enrichment is disabled, falls back to FAISS mapping text/snippet when present.
@@ -25,7 +24,7 @@ class InputSchema(BaseModel):
 
 
 class OutputSchema(RequirementOutput):
-    tool_name: Literal["search_by_topic"]
+    tool_name: Literal["search"]
 
 
 retriever = PCIDocumentRetriever()
@@ -86,7 +85,7 @@ def main(input_data: InputSchema) -> OutputSchema:
     if not q:
         return OutputSchema(
             status="error",
-            tool_name="search_by_topic",
+            tool_name="search",
             error="Empty query.",
             result=[],
             meta={"query": q, "k": k, "enriched": False},
@@ -98,7 +97,7 @@ def main(input_data: InputSchema) -> OutputSchema:
     except Exception as e:
         return OutputSchema(
             status="error",
-            tool_name="search_by_topic",
+            tool_name="search",
             error=f"retriever failure: {e}",
             result=[],
             meta={"query": q, "k": k, "enriched": False},
@@ -115,7 +114,7 @@ def main(input_data: InputSchema) -> OutputSchema:
     if not hits:
         return OutputSchema(
             status="not_found",
-            tool_name="search_by_topic",
+            tool_name="search",
             result=[],
             meta={"query": q, "k": k, "enriched": False},
         )
@@ -143,14 +142,15 @@ def main(input_data: InputSchema) -> OutputSchema:
     if not entries:
         return OutputSchema(
             status="not_found",
-            tool_name="search_by_topic",
+            tool_name="search",
             result=[],
             meta={"query": q, "k": k, "enriched": enriched},
         )
 
     return OutputSchema(
         status="success",
-        tool_name="search_by_topic",
+        tool_name="search",
         result=entries,
         meta={"query": q, "k": k, "enriched": enriched, "source": "sqlite" if enriched else "faiss"},
     )
+

@@ -62,3 +62,4 @@ def clear_caches():
     get_index.cache_clear()
     get_mapping.cache_clear()
     get_embedder.cache_clear()
+

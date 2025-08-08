@@ -76,3 +76,4 @@ async def handle_tool_call(
 @tool_router.post("/tool_call")
 async def tool_call_handler(call: ToolCall) -> Dict[str, Any]:
     return await handle_tool_call(call.tool_name, call.tool_input)
+

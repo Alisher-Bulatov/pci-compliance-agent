@@ -61,3 +61,4 @@ def get_tool_overview() -> str:
             lines.append(f"  • `{field_name}`: {f_type}")
         lines.append("")
     return "\n".join(lines)
+

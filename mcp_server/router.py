@@ -132,3 +132,4 @@ async def ask_mock_full_handler(payload: AskRequest):
 def reload_index():
     clear_caches()
     return {"status": "Caches cleared and ready for reload."}
+

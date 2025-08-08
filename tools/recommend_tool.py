@@ -23,10 +23,10 @@ def main(input_data: InputSchema) -> OutputSchema:
         tool = "compare_requirements"
         reason = "Input suggests comparing multiple requirements."
     elif any(x in q for x in ["say", "state", "exact", "wording", "what does", "3."]):
-        tool = "get_requirement_text"
+        tool = "get"
         reason = "Input requests exact text of a specific requirement."
     else:
-        tool = "search_by_topic"
+        tool = "search"
         reason = "Input is general or exploratory in nature."
 
     return OutputSchema(
@@ -37,3 +37,4 @@ def main(input_data: InputSchema) -> OutputSchema:
             "query": input_data.query,
         },
     )
+

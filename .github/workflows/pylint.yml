@@ -28,3 +28,4 @@ jobs:
       - name: Run Pylint
         run: |
           pylint --rcfile=.pylintrc $(git ls-files '*.py')
+
