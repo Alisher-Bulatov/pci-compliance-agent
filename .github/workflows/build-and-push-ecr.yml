@@ -6,20 +6,25 @@ on:
     branches: [ main ]
     paths:
       - 'Dockerfile'
+      - 'start.sh'
       - 'requirements.txt'
       - 'mcp_server/**'
       - 'retrieval/**'
       - 'tools/**'
       - 'agent/**'
 
+concurrency:
+  group: ecr-build-push
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      id-token: write      # for OIDC
       contents: read
     env:
-      AWS_REGION: us-east-2   # Ohio (App Runner region)
+      AWS_REGION: us-east-2          # Ohio
       ECR_REPO: pci-agent
     steps:
       - uses: actions/checkout@v4
@@ -33,19 +38,39 @@ jobs:
       - name: Ensure ECR repository exists
         run: |
           aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" \
-          || aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_REGION"
+          || aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_REGION" >/dev/null
 
-      - name: Login to ECR
+      - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & push image
+      - name: (Debug) Show Dockerfile used
+        run: |
+          pwd && ls -la
+          echo '--- Dockerfile ---'
+          sed -n '1,200p' Dockerfile
+
+      - name: Build image (sha + latest)
         run: |
           REGISTRY="${{ steps.ecr.outputs.registry }}"
-          IMAGE="$REGISTRY/$ECR_REPO:${{ github.sha }}"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+          IMAGE_SHA="$REGISTRY/$ECR_REPO:${{ github.sha }}"
+          IMAGE_LATEST="$REGISTRY/$ECR_REPO:latest"
 
-      - name: Share image uri
-        run: echo "Pushed $IMAGE"
+          docker build --no-cache -t "$IMAGE_SHA" .
+          docker tag "$IMAGE_SHA" "$IMAGE_LATEST"
+
+          echo "IMAGE_SHA=$IMAGE_SHA" >> $GITHUB_ENV
+          echo "IMAGE_LATEST=$IMAGE_LATEST" >> $GITHUB_ENV
+
+      - name: Push images
+        run: |
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
+
+      - name: Output image URIs
+        run: |
+          echo "Pushed:"
+          echo "  $IMAGE_SHA"
+          echo "  $IMAGE_LATEST"
+          echo "::notice title=ECR image (sha)::${IMAGE_SHA}"
+          echo "::notice title=ECR image (latest)::${IMAGE_LATEST}"
