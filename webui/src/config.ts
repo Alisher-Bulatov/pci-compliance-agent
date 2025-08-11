@@ -1,17 +1,18 @@
 // webui/src/config.ts
-// Resolve API base for both dev and production builds (Vite inlines at build time).
+// Single source of truth for the backend base URL.
 
 function stripTrailingSlash(s: string) {
   return s.replace(/\/+$/, "");
 }
 
+// Read Vite env baked at build time (Amplify: VITE_API_BASE_URL)
 const raw = String((import.meta as any)?.env?.VITE_API_BASE_URL ?? "").trim();
 
-// Dev fallback only if the env var isn't provided at build time.
+// Dev fallback only if not set at build time
 let base = raw && raw !== "undefined" ? raw : "http://localhost:8000";
 base = stripTrailingSlash(base);
 
-// If the site is HTTPS but base is HTTP, upgrade the scheme to avoid mixed-content blocks.
+// If site is HTTPS and base is HTTP, upgrade scheme to avoid mixed content
 try {
   if (typeof window !== "undefined") {
     const u = new URL(base, window.location.origin);
@@ -20,17 +21,16 @@ try {
     }
   }
 } catch {
-  // keep base as-is if URL parsing fails
+  /* keep base as-is */
 }
 
 export const API_BASE = base;
 
-// Expose for quick verification in the browser console
+// Debug hook: check from console (`__API_BASE__`)
 if (typeof window !== "undefined") {
   (window as any).__API_BASE__ = API_BASE;
-  const missing = !raw || raw === "undefined";
-  if (missing) {
-    console.warn("[webui] VITE_API_BASE_URL was missing at build time. Using:", API_BASE);
+  if (!raw || raw === "undefined") {
+    console.warn("[webui] VITE_API_BASE_URL missing at build; using", API_BASE);
   } else {
     console.info("[webui] API_BASE =", API_BASE);
   }

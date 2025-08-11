@@ -1,268 +1,143 @@
-import './App.css';
-import { useState, useEffect, useRef } from 'react';
-import { API_BASE } from './config';
+// webui/src/App.tsx
+import { useRef, useState } from "react";
+import { API_BASE } from "./config";
+import { askFull, askMockFull } from "./lib/api";
 
-type EventItem =
-  | { type: 'token'; text: string }
-  | { type: 'message'; content: string }
-  | { type: 'tool_call'; tool_name: string; tool_input: Record<string, any> }
-  | { type: 'tool_result'; text: any }
-  | { type: 'info'; message: string }
-  | { type: 'error'; message?: string; detail?: string }
-  | { type: 'stage'; label: string }
-  | { type: string; [key: string]: any };
+export default function App() {
+  const [useLive, setUseLive] = useState(false);
+  const [query, setQuery] = useState("");
+  const [systemLog, setSystemLog] = useState<string[]>([]);
+  const [clientLog, setClientLog] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-type GroupedStage = { stage: string; items: EventItem[] };
+  async function send(q?: string) {
+    const message = (q ?? query).trim();
+    if (!message || busy) return;
 
-function App() {
-  const [input, setInput] = useState('');
-  const [groups, setGroups] = useState<GroupedStage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'mock' | 'live'>(
-    () => (localStorage.getItem('chatMode') as 'mock' | 'live') || 'mock'
-  );
-  const [tokenBuffer, setTokenBuffer] = useState('');
-  const controllerRef = useRef<AbortController | null>(null);
-  const latestMessageRef = useRef<HTMLDivElement | null>(null);
+    setBusy(true);
+    setSystemLog((l) => [...l, `Sending query: "${message}"`]);
+    setClientLog([]);
 
-  const stopStream = () => {
-    controllerRef.current?.abort();
-    controllerRef.current = null;
-    setLoading(false);
-  };
-
-  useEffect(() => localStorage.setItem('chatMode', mode), [mode]);
-
-  useEffect(() => {
-    latestMessageRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [groups, tokenBuffer]);
-
-  const sendMessage = async () => {
-    if (!input.trim()) return;
-
-    // Quick guard: if API_BASE is somehow empty in the built bundle,
-    // show a clear error in the UI.
-    if (!API_BASE) {
-      setGroups([{ stage: 'Client', items: [{ type: 'error', message: 'API_BASE is empty. Rebuild web app with VITE_API_BASE_URL.' }] }]);
-      return;
-    }
-
-    let groupsCopy: GroupedStage[] = [
-      { stage: 'System', items: [{ type: 'info', message: `Sending query: "${input}"` }] }
-    ];
-    setGroups(groupsCopy);
-    setLoading(true);
-    setTokenBuffer('');
-
-    // Build absolute endpoint. API_BASE was normalised (no trailing slash).
-    const path = mode === 'live' ? 'ask_full' : 'ask_mock_full';
-    const endpoint = `${API_BASE}/${path}`;
+    const payload = { message };
 
     try {
-      const controller = new AbortController();
-      controllerRef.current = controller;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Backend expects { message: string }
-        body: JSON.stringify({ message: input }),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        setGroups(prev => [
-          ...prev,
-          {
-            stage: 'Server',
-            items: [
-              {
-                type: 'error',
-                message: `HTTP ${response.status} ${response.statusText}`,
-                detail: text || `Endpoint: ${endpoint}`
-              }
-            ]
-          }
-        ]);
-        return;
+      const onLine = (obj: any) => {
+        setClientLog((l) => [...l, JSON.stringify(obj)]);
+      };
+      if (useLive) {
+        await askFull(payload, onLine);
+      } else {
+        await askMockFull(payload, onLine);
       }
-
-      if (!response.body) {
-        setLoading(false);
-        setInput('');
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let localTokenBuffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const item: EventItem = JSON.parse(line);
-
-            if (item.type === 'token') {
-              localTokenBuffer += (item as any).text || '';
-              continue;
-            }
-
-            if (item.type === 'stage') {
-              if (localTokenBuffer) {
-                groupsCopy[groupsCopy.length - 1]?.items.push({
-                  type: 'message',
-                  content: localTokenBuffer
-                });
-                localTokenBuffer = '';
-              }
-              groupsCopy.push({ stage: (item as any).label || 'Unnamed Stage', items: [] });
-              continue;
-            }
-
-            if (localTokenBuffer) {
-              groupsCopy[groupsCopy.length - 1]?.items.push({
-                type: 'message',
-                content: localTokenBuffer
-              });
-              localTokenBuffer = '';
-            }
-
-            const currentGroup = groupsCopy[groupsCopy.length - 1];
-            const isDupTool =
-              item.type === 'tool_result' &&
-              currentGroup.items.some(
-                (i) => i.type === 'tool_result' &&
-                  JSON.stringify((i as any).text) === JSON.stringify((item as any).text)
-              );
-
-            if (!isDupTool) currentGroup.items.push(item);
-          } catch {
-            console.error('Invalid JSON from stream:', line);
-          }
-        }
-
-        setGroups([...groupsCopy]);
-        setTokenBuffer(localTokenBuffer);
-      }
-
-      if (localTokenBuffer) {
-        groupsCopy[groupsCopy.length - 1]?.items.push({
-          type: 'message',
-          content: localTokenBuffer
-        });
-      }
-
-      setGroups([...groupsCopy]);
-      setTokenBuffer('');
     } catch (e: any) {
-      setGroups(prev => [
-        ...prev,
-        { stage: 'Client', items: [{ type: 'error', message: e?.message || 'Network error' }] }
-      ]);
+      setClientLog((l) => [...l, `Error: ${e?.message || e}`]);
     } finally {
-      setLoading(false);
-      setInput('');
+      setBusy(false);
     }
-  };
+  }
 
-  const renderers: Record<string, (item: any, i: number) => any> = {
-    message: (item, i) => <div key={i} className="fade-in">{item.content}</div>,
-    tool_call: (item, i) => (
-      <div key={i} className="tool-box tool-call fade-in">
-        📦 <b>Tool Call:</b><br />
-        <b>{item.tool_name}</b><br />
-        <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(item.tool_input, null, 2)}</pre>
-      </div>
-    ),
-    tool_result: (item, i) => (
-      <div key={i} className="tool-box tool-result fade-in">
-        📄 <b>Tool Result:</b><br />
-        <pre style={{ whiteSpace: 'pre-wrap' }}>
-          {typeof item.text === 'string' ? item.text : JSON.stringify(item.text, null, 2)}
-        </pre>
-      </div>
-    ),
-    info: (item, i) => <div key={i} className="info fade-in">{item.message}</div>,
-    error: (item, i) => <div key={i} className="error fade-in">Error: {item.detail || item.message}</div>,
-    stage: () => <></>,
-  };
+  function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") send();
+  }
 
   return (
-    <div className="app-container">
-      <h2>🛡️ PCI DSS Compliance Agent ({mode === 'live' ? 'Live' : 'Mock'} Chat)</h2>
+    <div style={{ minHeight: "100vh", background: "#1e1e1e", color: "#e5e7eb" }}>
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "16px" }}>
+        <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>
+            <span style={{ marginRight: 8 }}>🛡️</span> PCI DSS Compliance Agent (Mock Chat)
+          </div>
+          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.8 }}>
+            Backend: <code>{API_BASE}</code>
+          </div>
+        </header>
 
-      <div style={{ marginBottom: '0.5rem', fontSize: 12, opacity: 0.8 }}>
-        Backend: <code>{API_BASE}</code>
-      </div>
+        <div style={{ fontSize: 12, marginBottom: 8 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
+            Use Live Mode
+          </label>
+        </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label>
+        <div style={{ display: "flex", gap: 8 }}>
           <input
-            type="checkbox"
-            checked={mode === 'live'}
-            onChange={() => setMode(mode === 'live' ? 'mock' : 'live')}
-          />{' '}
-          Use Live Mode
-        </label>
-      </div>
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKey}
+            placeholder="Ask something like: Compare 1.1.2 and 12.5.1"
+            style={{
+              flex: 1,
+              background: "#111827",
+              color: "#e5e7eb",
+              border: "1px solid #374151",
+              padding: "10px 12px",
+              borderRadius: 6,
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={() => send()}
+            disabled={busy}
+            style={{
+              background: busy ? "#374151" : "#2563eb",
+              color: "#fff",
+              border: 0,
+              padding: "10px 14px",
+              borderRadius: 6,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {busy ? "Sending…" : "Send"}
+          </button>
+        </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <input
-          className="chat-input"
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Ask something like: Compare 1.1.2 and 12.5.1"
-        />
-
-        {!loading ? (
-          <button className="chat-button" onClick={sendMessage}>▶ Send</button>
-        ) : (
-          <>
-            <button className="chat-button" disabled>Responding...</button>
-            <button className="chat-button stop" onClick={stopStream}>
-              ⏹ Stop<span className="dot-pulse" />
-            </button>
-          </>
-        )}
-      </div>
-
-      <div>
-        {groups.map((group, gi) => (
-          <div key={gi} className="stage-block">
-            <div style={{ fontWeight: 'bold', fontSize: '1.1em', color: '#8bc4ff', marginBottom: '0.5em' }}>
-              {group.stage}
-            </div>
-
-            {group.items.map((item, i) =>
-              renderers[item.type]?.(item, i) ?? (
-                <div key={i} className="fade-in" style={{ color: 'orange' }}>
-                  ⚠ Unknown event: {item.type}
-                </div>
-              )
-            )}
-
-            {gi === groups.length - 1 && tokenBuffer && (
-              <div ref={latestMessageRef} className="fade-in" style={{ color: '#aaa', fontStyle: 'italic' }}>
-                {tokenBuffer}<span className="cursor">▌</span>
-              </div>
+        <section style={{ marginTop: 18 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>System</div>
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #374151",
+              borderRadius: 8,
+              padding: 12,
+              minHeight: 84,
+              whiteSpace: "pre-wrap",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontSize: 13,
+            }}
+          >
+            {systemLog.length === 0 ? (
+              <span style={{ opacity: 0.6 }}>Waiting…</span>
+            ) : (
+              systemLog.map((l, i) => <div key={i}>{l}</div>)
             )}
           </div>
-        ))}
+        </section>
+
+        <section style={{ marginTop: 18 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Client</div>
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #374151",
+              borderRadius: 8,
+              padding: 12,
+              minHeight: 140,
+              whiteSpace: "pre-wrap",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontSize: 13,
+            }}
+          >
+            {clientLog.length === 0 ? (
+              <span style={{ color: "#ef4444" }}>{busy ? "Streaming…" : "No output yet."}</span>
+            ) : (
+              clientLog.map((l, i) => <div key={i}>{l}</div>)
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 }
-
-export default App;

@@ -1,6 +1,6 @@
 version: 1
 applications:
-  - appRoot: webui   # MUST match AMPLIFY_MONOREPO_APP_ROOT
+  - appRoot: webui   # must match AMPLIFY_MONOREPO_APP_ROOT
     frontend:
       phases:
         preBuild:
@@ -10,7 +10,7 @@ applications:
           commands:
             - npm run build
       artifacts:
-        baseDirectory: dist   # appRoot is webui, so dist is correct
+        baseDirectory: dist
         files:
           - '**/*'
       cache:
