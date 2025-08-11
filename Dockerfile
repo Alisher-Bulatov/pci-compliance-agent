@@ -1,7 +1,9 @@
 # Dockerfile
 FROM python:3.11-slim
 
-ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/root/.cache/huggingface \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # System deps (minimal)
@@ -11,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 # Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-  && pip install --no-cache-dir boto3
+ && pip install --no-cache-dir boto3
 
 # (Optional) pre-warm the embedding model to avoid first-request stalls
-# If build time becomes long or CI blocks outbound, comment this out.
+# Comment out if CI/build time is an issue.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Copy backend code
@@ -23,9 +25,9 @@ COPY agent ./agent
 COPY retrieval ./retrieval
 COPY tools ./tools
 
-# Start script pulls data from S3, then launches uvicorn
+# Start script: normalize CRLF and make executable (prevents exec format errors)
 COPY start.sh ./start.sh
-RUN chmod +x ./start.sh
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Service config
 ENV PORT=8080
@@ -43,4 +45,5 @@ ENV LLM_MODEL="qwen2.5:7b-instruct"
 # ENV FAISS_KEY=""
 # ENV DB_KEY=""
 
-CMD ["./start.sh"]
+# Run through /bin/sh to avoid shebang/encoding issues
+CMD ["/bin/sh", "./start.sh"]
