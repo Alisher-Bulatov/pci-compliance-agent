@@ -16,8 +16,7 @@ type GroupedStage = {
   items: EventItem[];
 };
 
-// API base is configurable via Amplify env var VITE_API_BASE_URL.
-// Falls back to localhost for local dev.
+// API base is configurable via Amplify env var VITE_API_BASE_URL; falls back to localhost.
 const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL ||
   (import.meta as any).env?.VITE_MCP_API_URL ||
@@ -104,7 +103,7 @@ function App() {
 
             // Token streaming
             if (item.type === 'token') {
-              localTokenBuffer += item.text || '';
+              localTokenBuffer += (item as any).text || '';
               continue;
             }
 
@@ -118,13 +117,13 @@ function App() {
                 localTokenBuffer = '';
               }
               groupsCopy.push({
-                stage: item.label || item.message || 'Unnamed Stage',
+                stage: (item as any).label || (item as any).message || 'Unnamed Stage',
                 items: []
               });
               continue;
             }
 
-            // Flush buffered tokens into a message before non-token events
+            // Flush buffered tokens before non-token events
             if (localTokenBuffer.length > 0) {
               groupsCopy[groupsCopy.length - 1]?.items.push({
                 type: 'message',
@@ -180,8 +179,8 @@ function App() {
     }
   };
 
-  // Loosen types inside renderer callbacks to avoid union exhaustiveness errors at build time.
-  const renderers: Record<string, (item: any, i: number) => JSX.Element> = {
+  // Loosen types to avoid JSX namespace/type issues in strict build.
+  const renderers: Record<string, (item: any, i: number) => any> = {
     message: (item, i) => <div key={i} className="fade-in">{item.content}</div>,
     tool_call: (item, i) => (
       <div key={i} className="tool-box tool-call fade-in">
