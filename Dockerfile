@@ -4,27 +4,30 @@ FROM python:3.11-slim
 ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
 WORKDIR /app
 
+# System deps (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
   && rm -rf /var/lib/apt/lists/*
 
 # Python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+  && pip install --no-cache-dir boto3
 
-# Pre-warm the embedding model (optional but nice)
+# (Optional) pre-warm the embedding model to avoid first-request stalls
+# If build time becomes long or CI blocks outbound, comment this out.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Copy backend code & data
+# Copy backend code
 COPY mcp_server ./mcp_server
 COPY agent ./agent
 COPY retrieval ./retrieval
 COPY tools ./tools
 
-# FAISS index + DB (adjust paths if yours differ)
-COPY pci_index.faiss ./data/pci_index.faiss
-COPY pci_requirements.db ./data/pci_requirements.db
-# COPY mapping.pkl ./data/mapping.pkl  # if you add one later
+# Start script pulls data from S3, then launches uvicorn
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
+# Service config
 ENV PORT=8080
 EXPOSE 8080
 
@@ -35,4 +38,9 @@ ENV CORS_ALLOW_ORIGINS="*"
 ENV LLM_API_URL="http://localhost:11434/api/generate"
 ENV LLM_MODEL="qwen2.5:7b-instruct"
 
-CMD ["python", "-m", "uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Data download envs (set these in App Runner)
+# ENV DATA_BUCKET=""
+# ENV FAISS_KEY=""
+# ENV DB_KEY=""
+
+CMD ["./start.sh"]
