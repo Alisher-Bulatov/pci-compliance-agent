@@ -8,23 +8,11 @@ applications:
             - npm ci
         build:
           commands:
-            # 1) Prove the env var is present in Amplify
-            - echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}"
-            - 'test -n "$VITE_API_BASE_URL" || (echo "ERROR: VITE_API_BASE_URL is empty"; exit 1)'
-
-            # 2) Make sure Vite sees it (Vite loads .env.production during build)
-            - printf 'VITE_API_BASE_URL=%s\n' "$VITE_API_BASE_URL" > .env.production
+            - echo "VITE_API_BASE_URL=$VITE_API_BASE_URL"
+            - '[ -n "$VITE_API_BASE_URL" ] || (echo "ERROR: VITE_API_BASE_URL is empty"; exit 1)'
+            - printf "VITE_API_BASE_URL=%s\n" "$VITE_API_BASE_URL" > .env.production
             - echo "--- .env.production ---" && cat .env.production && echo "----------------------"
-
-            # 3) Build
-            - npm run build -- --mode production
-
-            # 4) Sanity: the bundle should NOT contain localhost anymore
-            - echo "--- grep dist for localhost ---"
-            - (grep -R "localhost:8000" -n dist && (echo "ERROR: bundle still references localhost"; exit 1)) || echo "OK: no localhost found"
-            - echo "--- grep dist for API base domain (optional) ---"
-            - '[ -n "$VITE_API_BASE_URL" ] && echo "$VITE_API_BASE_URL" | sed "s#https\?://##" | cut -d/ -f1 | xargs -I{} sh -c ''grep -R "{}" -n dist || true'''
-
+            - npm run build
       artifacts:
         baseDirectory: dist
         files:
