@@ -1,5 +1,6 @@
 import './App.css';
 import { useState, useEffect, useRef } from 'react';
+import { API_BASE } from './config';
 
 type EventItem =
   | { type: 'token'; text: string }
@@ -15,12 +16,6 @@ type GroupedStage = {
   stage: string;
   items: EventItem[];
 };
-
-// API base is configurable via Amplify env var VITE_API_BASE_URL; falls back to localhost.
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  (import.meta as any).env?.VITE_MCP_API_URL ||
-  'http://localhost:8000';
 
 function App() {
   const [input, setInput] = useState('');
@@ -117,7 +112,7 @@ function App() {
                 localTokenBuffer = '';
               }
               groupsCopy.push({
-                stage: (item as any).label || (item as any).message || 'Unnamed Stage',
+                stage: (item as any).label || 'Unnamed Stage',
                 items: []
               });
               continue;
@@ -179,7 +174,7 @@ function App() {
     }
   };
 
-  // Loosen types to avoid JSX namespace/type issues in strict build.
+  // Loosen types to avoid JSX/type issues in strict build.
   const renderers: Record<string, (item: any, i: number) => any> = {
     message: (item, i) => <div key={i} className="fade-in">{item.content}</div>,
     tool_call: (item, i) => (
