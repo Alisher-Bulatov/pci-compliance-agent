@@ -4,14 +4,15 @@ FROM python:3.11-slim
 ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+  && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps
+# Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-warm the embedding model to avoid first-request stalls
-RUN python - <<'PY'\nfrom sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')\nPY
+# Pre-warm the embedding model (optional but nice)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Copy backend code & data
 COPY mcp_server ./mcp_server
@@ -19,11 +20,10 @@ COPY agent ./agent
 COPY retrieval ./retrieval
 COPY tools ./tools
 
-# FAISS + DB files (adjust if your paths differ)
+# FAISS index + DB (adjust paths if yours differ)
 COPY pci_index.faiss ./data/pci_index.faiss
 COPY pci_requirements.db ./data/pci_requirements.db
-# (If you also have a mapping file, uncomment)
-# COPY mapping.pkl ./data/mapping.pkl
+# COPY mapping.pkl ./data/mapping.pkl  # if you add one later
 
 ENV PORT=8080
 EXPOSE 8080
