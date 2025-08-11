@@ -202,27 +202,57 @@ pip install -r requirements.txt
 
 ---
 
-## 🔍 Sample Prompts
+Sample Prompts:
 
-### 1. Direct retrieval tests (`get`)
-- What is written in requirement 6.5?
-- Give me the text of 2.3
-- Show the details for 10.6
+  # 1) Direct retrieval tests (single-ID get)
+    - "What is written in requirement 6.5?"
+    - "Give me the text of 2.3"
+    - "Show the details for 10.6"
+    - "Read me 3.2.1"
+    - "What does 12.10 say?"
 
-### 2. Topic search tests (`search`)
-- Which PCI DSS rules address anti-phishing protections?
-- Find all requirements related to penetration testing
-- List the requirements about cryptographic key storage
+  # 2) Batch retrieval tests (multi-ID get with order + dedupe)
+    - "Show 10.6, 10.5, and 10.2.1"
+    - "Give me 1.1.1 and 1.1.2"
+    - "Compare 1.2.1, 1.2, and 1.2.1 again"        # expect get:["1.2.1","1.2"] (dedupe, keep first-seen order)
+    - "Summarize 3.2 and 4.2 side by side"
+    - "Explain 12.5 and 12.5.1 in simple terms"
 
-### 3. Interpretive reasoning tests
-- Is 3.2.1 focused on storage limitations or on transmission security?
-- Explain 9.5 in plain terms
-- Why is 1.5 critical for protecting the CDE?
+  # 3) Topic search tests (no explicit IDs → search)
+    - "Which PCI DSS rules address anti-phishing protections?"
+    - "Find all requirements related to penetration testing"
+    - "List the requirements about cryptographic key storage"
+    - "What covers centralized time synchronization across systems?"
+    - "Show me network intrusion detection/response requirements"
 
-### 4. Mixed / ambiguous to trigger tool choice
-- Tell me about secure software development requirements
-- Which requirement covers time-synchronization mechanisms?
-- How should wireless environments be secured according to PCI DSS?
+  # 4) Interpretive reasoning tests (ID present → still get)
+    - "Is 3.2.1 focused on storage limitations or on transmission security?"
+    - "Explain 9.5 in plain terms"
+    - "Why is 1.5 critical for protecting the CDE?"
+    - "Clarify the difference between 10.6 and 10.5"
+    - "Does 2.3 apply to all wireless or only guest Wi-Fi?"
+
+  # 5) Explicit extra-context with IDs (should choose search, not get)
+  #    These ask for *related/what’s new/guidance/mapping/evidence* → search:"..."
+    - "Find related requirements to 10.6"
+    - "What’s new about 3.6.1 in the latest version?"
+    - "Show guidance or examples from SAQ/ROC for 11.2.1"
+    - "Map 12.6 to ISO/IEC 27001 controls"
+    - "What test evidence is expected for 1.1.2?"
+
+  # 6) Mixed / ambiguous to trigger tool choice (IDs sometimes baked into query)
+    - "Tell me about secure software development requirements"             # search
+    - "Which requirement covers time-synchronization mechanisms?"          # search (likely 10.6)
+    - "How should wireless environments be secured according to PCI DSS?"  # search (likely 2.3)
+    - "What requirement talks about MFA into the CDE?"                     # search (8.4/8.5)
+
+  # 7) Edge cases the router must handle cleanly
+    - "hello"                                   # skip
+    - "thanks!"                                 # skip
+    - "Show 13"                                 # invalid ID → search (no valid IDs detected)
+    - "Explain v4.0.1 changes in 3.x"           # no valid IDs → search
+    - "Can you summarize 1.2.1 and 1.2.1?"      # get with dedupe → get:["1.2.1"]
+    - "Compare 4.2 and 3.5 quickly"             # get:["4.2","3.5"]
 
 ---
 
