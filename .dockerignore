@@ -1,0 +1,6 @@
+.git
+**/__pycache__/
+*.pyc
+webui/
+node_modules/
+PCI-DSS-v4_0_1.pdf
