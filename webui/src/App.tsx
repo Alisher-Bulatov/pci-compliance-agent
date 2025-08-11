@@ -16,6 +16,13 @@ type GroupedStage = {
   items: EventItem[];
 };
 
+// API base is configurable via Amplify env var VITE_API_BASE_URL.
+// Falls back to localhost for local dev.
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL ||
+  (import.meta as any).env?.VITE_MCP_API_URL ||
+  'http://localhost:8000';
+
 function App() {
   const [input, setInput] = useState('');
   const [groups, setGroups] = useState<GroupedStage[]>([]);
@@ -25,6 +32,7 @@ function App() {
   );
   const [tokenBuffer, setTokenBuffer] = useState('');
   const controllerRef = useRef<AbortController | null>(null);
+  const latestMessageRef = useRef<HTMLDivElement | null>(null);
 
   const stopStream = () => {
     if (controllerRef.current) {
@@ -33,7 +41,6 @@ function App() {
       setLoading(false);
     }
   };
-  const latestMessageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     localStorage.setItem('chatMode', mode);
@@ -58,50 +65,66 @@ function App() {
     setLoading(true);
     setTokenBuffer('');
 
-    const endpoint =
-      mode === 'live'
-        ? 'http://localhost:8000/ask_full'
-        : 'http://localhost:8000/ask_mock_full';
+    const endpoint = `${API_BASE}/${mode === 'live' ? 'ask_full' : 'ask_mock_full'}`;
 
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: input }),
-      signal: controller.signal
-    });
+    try {
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: input }),
+        signal: controller.signal
+      });
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let localTokenBuffer = '';
+      if (!response.body) {
+        setLoading(false);
+        setInput('');
+        return;
+      }
 
-    if (!reader) {
-      setLoading(false);
-      setInput('');
-      return;
-    }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let localTokenBuffer = '';
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
+        for (const line of lines) {
+          if (!line.trim()) continue;
 
-        try {
-          const item: EventItem = JSON.parse(line);
-          if (item.type === 'token') {
-            localTokenBuffer += item.text || '';
-            continue;
-          }
+          try {
+            const item: EventItem = JSON.parse(line);
 
-          if (item.type === 'stage') {
+            // Token streaming
+            if (item.type === 'token') {
+              localTokenBuffer += item.text || '';
+              continue;
+            }
+
+            // Stage change
+            if (item.type === 'stage') {
+              if (localTokenBuffer.length > 0) {
+                groupsCopy[groupsCopy.length - 1]?.items.push({
+                  type: 'message',
+                  content: localTokenBuffer
+                });
+                localTokenBuffer = '';
+              }
+              groupsCopy.push({
+                stage: item.label || item.message || 'Unnamed Stage',
+                items: []
+              });
+              continue;
+            }
+
+            // Flush buffered tokens into a message before non-token events
             if (localTokenBuffer.length > 0) {
               groupsCopy[groupsCopy.length - 1]?.items.push({
                 type: 'message',
@@ -109,71 +132,80 @@ function App() {
               });
               localTokenBuffer = '';
             }
-            groupsCopy.push({ stage: item.label || item.message || 'Unnamed Stage', items: [] });
-            continue;
-          }
 
-          if (localTokenBuffer.length > 0) {
-            groupsCopy[groupsCopy.length - 1]?.items.push({
-              type: 'message',
-              content: localTokenBuffer
-            });
-            localTokenBuffer = '';
-          }
+            const currentGroup = groupsCopy[groupsCopy.length - 1];
 
-          const currentGroup = groupsCopy[groupsCopy.length - 1];
-          const isDuplicateTool =
-            item.type === 'tool_result' &&
-            currentGroup.items.some(
-              (i) =>
-                i.type === 'tool_result' &&
-                JSON.stringify(i.text) === JSON.stringify(item.text)
-            );
+            // Dedup consecutive identical tool_result payloads
+            const isDuplicateTool =
+              item.type === 'tool_result' &&
+              currentGroup.items.some(
+                (i) =>
+                  i.type === 'tool_result' &&
+                  JSON.stringify((i as any).text) === JSON.stringify((item as any).text)
+              );
 
-          if (!isDuplicateTool) {
-            currentGroup.items.push(item);
+            if (!isDuplicateTool) {
+              currentGroup.items.push(item);
+            }
+          } catch {
+            console.error('Invalid JSON:', line);
           }
-        } catch (err) {
-          console.error('Invalid JSON:', line);
         }
+
+        setGroups([...groupsCopy]);
+        setTokenBuffer(localTokenBuffer);
+      }
+
+      // Flush any trailing tokens
+      if (localTokenBuffer.length > 0) {
+        groupsCopy[groupsCopy.length - 1]?.items.push({
+          type: 'message',
+          content: localTokenBuffer
+        });
       }
 
       setGroups([...groupsCopy]);
-      setTokenBuffer(localTokenBuffer);
+      setTokenBuffer('');
+    } catch (e: any) {
+      setGroups((prev) => [
+        ...prev,
+        {
+          stage: 'Client',
+          items: [{ type: 'error', message: e?.message || 'Network error' }]
+        }
+      ]);
+    } finally {
+      setLoading(false);
+      setInput('');
     }
-
-    if (localTokenBuffer.length > 0) {
-      groupsCopy[groupsCopy.length - 1]?.items.push({
-        type: 'message',
-        content: localTokenBuffer
-      });
-    }
-
-    setGroups([...groupsCopy]);
-    setTokenBuffer('');
-    setLoading(false);
-    setInput('');
   };
 
-  const renderers: Record<string, (item: EventItem, i: number) => JSX.Element> = {
+  // Loosen types inside renderer callbacks to avoid union exhaustiveness errors at build time.
+  const renderers: Record<string, (item: any, i: number) => JSX.Element> = {
     message: (item, i) => <div key={i} className="fade-in">{item.content}</div>,
     tool_call: (item, i) => (
       <div key={i} className="tool-box tool-call fade-in">
         📦 <b>Tool Call:</b><br />
         <b>{item.tool_name}</b><br />
-        {JSON.stringify(item.tool_input, null, 2)}
+        <pre style={{ whiteSpace: 'pre-wrap' }}>
+          {JSON.stringify(item.tool_input, null, 2)}
+        </pre>
       </div>
     ),
     tool_result: (item, i) => (
       <div key={i} className="tool-box tool-result fade-in">
         📄 <b>Tool Result:</b><br />
-        {typeof item.text === 'string'
-          ? item.text
-          : JSON.stringify(item.text, null, 2)}
+        <pre style={{ whiteSpace: 'pre-wrap' }}>
+          {typeof item.text === 'string' ? item.text : JSON.stringify(item.text, null, 2)}
+        </pre>
       </div>
     ),
     info: (item, i) => <div key={i} className="info fade-in">{item.message}</div>,
-    error: (item, i) => <div key={i} className="error fade-in">Error: {item.detail || item.message}</div>,
+    error: (item, i) => (
+      <div key={i} className="error fade-in">
+        Error: {item.detail || item.message}
+      </div>
+    ),
     stage: () => <></>
   };
 
@@ -201,50 +233,52 @@ function App() {
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
           placeholder="Ask something like: Compare 1.1.2 and 12.5.1"
         />
-        
-{!loading ? (
-  
-<button
-  className={"chat-button" + (loading ? " stop" : "")}
-  onClick={loading ? stopStream : sendMessage}
-  title={loading ? "Stop streaming" : "Send message"}
-  disabled={loading && false}  // keep button enabled for stopping
->
-  {loading ? (
-    <>
-      ⏹ Streaming<span className="dot-pulse" />
-    </>
-  ) : (
-    <>
-      ▶ Send
-    </>
-  )}
-</button>
 
-
-) : (
-  <>
-    <button className="chat-button" disabled>
-      Responding...
-    </button>
-    <button
-      className="chat-button stop"
-      onClick={stopStream}
-      title="Stop response"
-    >
-      ⏹ Stop<span className="dot-pulse" />
-    </button>
-  </>
-)}
-
+        {!loading ? (
+          <button
+            className={"chat-button" + (loading ? " stop" : "")}
+            onClick={loading ? stopStream : sendMessage}
+            title={loading ? "Stop streaming" : "Send message"}
+            disabled={loading && false}
+          >
+            {loading ? (
+              <>
+                ⏹ Streaming<span className="dot-pulse" />
+              </>
+            ) : (
+              <>▶ Send</>
+            )}
+          </button>
+        ) : (
+          <>
+            <button className="chat-button" disabled>
+              Responding...
+            </button>
+            <button
+              className="chat-button stop"
+              onClick={stopStream}
+              title="Stop response"
+            >
+              ⏹ Stop<span className="dot-pulse" />
+            </button>
+          </>
+        )}
       </div>
 
       <div>
         {groups.map((group, gi) => (
           <div key={gi} className="stage-block">
-            <div style={{ fontWeight: 'bold', fontSize: '1.1em', color: '#8bc4ff', marginBottom: '0.5em' }}>
+            <div
+              style={{
+                fontWeight: 'bold',
+                fontSize: '1.1em',
+                color: '#8bc4ff',
+                marginBottom: '0.5em'
+              }}
+            >
               {group.stage}
             </div>
+
             {group.items.map((item, i) =>
               renderers[item.type]?.(item, i) ?? (
                 <div key={i} className="fade-in" style={{ color: 'orange' }}>
@@ -252,8 +286,13 @@ function App() {
                 </div>
               )
             )}
+
             {gi === groups.length - 1 && tokenBuffer && (
-              <div ref={latestMessageRef} className="fade-in" style={{ color: '#aaa', fontStyle: 'italic' }}>
+              <div
+                ref={latestMessageRef}
+                className="fade-in"
+                style={{ color: '#aaa', fontStyle: 'italic' }}
+              >
                 {tokenBuffer}
                 <span className="cursor">▌</span>
               </div>
@@ -266,4 +305,3 @@ function App() {
 }
 
 export default App;
-
