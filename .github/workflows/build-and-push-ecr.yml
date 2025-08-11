@@ -1,0 +1,51 @@
+name: Build & Push backend image to ECR
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'mcp_server/**'
+      - 'retrieval/**'
+      - 'tools/**'
+      - 'agent/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: us-east-2   # Ohio (App Runner region)
+      ECR_REPO: pci-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::927100153505:role/GitHubActions-ECRPush
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" \
+          || aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_REGION"
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push image
+        run: |
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          IMAGE="$REGISTRY/$ECR_REPO:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Share image uri
+        run: echo "Pushed $IMAGE"
