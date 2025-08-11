@@ -1,6 +1,6 @@
 version: 1
 applications:
-  - appRoot: webui   # must match AMPLIFY_MONOREPO_APP_ROOT
+  - appRoot: webui
     frontend:
       phases:
         preBuild:
@@ -8,10 +8,6 @@ applications:
             - npm ci
         build:
           commands:
-            - echo "VITE_API_BASE_URL=$VITE_API_BASE_URL"
-            - '[ -n "$VITE_API_BASE_URL" ] || (echo "ERROR: VITE_API_BASE_URL is empty"; exit 1)'
-            - printf "VITE_API_BASE_URL=%s\n" "$VITE_API_BASE_URL" > .env.production
-            - echo "--- .env.production ---" && cat .env.production && echo "----------------------"
             - npm run build
       artifacts:
         baseDirectory: dist
