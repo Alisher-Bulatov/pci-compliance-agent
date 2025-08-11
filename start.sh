@@ -8,12 +8,11 @@ if [ -n "${DATA_BUCKET:-}" ] && { [ -n "${FAISS_KEY:-}" ] || [ -n "${DB_KEY:-}" 
   echo "[start] Starting background artifact download from s3://$DATA_BUCKET ..."
   (
     python - <<'PY'
-import os, boto3, sys
+import os, boto3
 
 bucket    = os.environ["DATA_BUCKET"]
 faiss_key = os.environ.get("FAISS_KEY")
 db_key    = os.environ.get("DB_KEY")
-
 s3 = boto3.client("s3")
 
 def dl(key, dst):
@@ -35,7 +34,7 @@ else
   echo "[start] Skipping S3 download (DATA_BUCKET/FAISS_KEY/DB_KEY not set)."
 fi
 
-# ---- Start API server immediately so App Runner health check passes ----
+# ---- Start API server immediately so health check passes ----
 PORT="${PORT:-8080}"
 WORKERS="${UVICORN_WORKERS:-1}"
 
@@ -45,4 +44,3 @@ exec uvicorn mcp_server.main:app \
   --port "${PORT}" \
   --workers "${WORKERS}" \
   --proxy-headers
-w

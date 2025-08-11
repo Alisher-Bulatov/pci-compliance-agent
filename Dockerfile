@@ -1,4 +1,3 @@
-# Dockerfile
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,8 +16,8 @@ RUN pip install --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt \
  && pip install --no-cache-dir boto3
 
-# (Optional) warm embeddings model
-RUN python - <<'PY'\nfrom sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')\nPY
+# Optional: pre-warm embeddings model (comment this out if build time is an issue)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # App code
 COPY mcp_server ./mcp_server
@@ -30,11 +29,11 @@ COPY tools ./tools
 COPY start.sh ./start.sh
 RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
-# Service config (App Runner uses PORT=8080)
+# Service config (App Runner probes port 8080)
 ENV PORT=8080
 EXPOSE 8080
 
-# CORS + model defaults (override in App Runner if needed)
+# Defaults (override in App Runner if needed)
 ENV CORS_ALLOW_ORIGINS="*"
 ENV LLM_API_URL="http://localhost:11434/api/generate"
 ENV LLM_MODEL="qwen2.5:7b-instruct"
