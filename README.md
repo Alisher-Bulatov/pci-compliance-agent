@@ -1,7 +1,7 @@
 # 🛡️ PCI DSS Compliance Agent
 
 This project is a document-aware assistant for PCI DSS (Payment Card Industry Data Security Standard) compliance.  
-It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool execution to help users understand and interact with PCI DSS requirements through transparent, structured reasoning and tool-based execution.
+It combines a Retrieval-Augmented Generation (RAG) pipeline with a planning step and modular tool execution to help users understand and interact with PCI DSS requirements through transparent, structured reasoning and tool-based execution.
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
@@ -11,20 +11,39 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 
 ## 🔧 Key Components
 
-- **FAISS Retriever**  
-  Uses `pci_chunks.txt` and a prebuilt FAISS index (`pci_index.faiss`) to locate relevant content from PCI DSS documentation.
+- **Web UI (AWS Amplify)**  
+  Browser-based chat interface with support for "Mock Chat" and "Live Mode".  
+  Sends user queries to the backend over HTTPS and displays retrieved PCI DSS requirement excerpts by ID or via semantic search.
 
-- **LLM Agent**  
-  Leverages structured prompts to determine whether to respond directly or call a tool. Enables reasoning and step-by-step execution.
+- **Backend (FastAPI on AWS App Runner)**  
+  Hosted in AWS App Runner, container image stored in Amazon ECR.  
+  On startup, downloads `pci_index.faiss` (FAISS vector index) and `pci_requirements.db` (SQLite database) from S3 into `/app/data`.  
+  Exposes `/healthz` endpoint for AWS App Runner health checks.  
+  REST API routes:  
+    - `GET /search` — semantic search in FAISS, enriched with SQLite results.  
+    - `GET /get_requirement_text` — retrieve requirement text by ID.
 
-- **MCP Server (Modular Command Processor)**  
-  A FastAPI-based service that handles backend execution of tools such as `get`, `search`, and `compare_requirements`.
+- **Data Layer**  
+  - FAISS `IndexIDMap` for dense embedding similarity search.  
+  - SQLite database storing requirements with IDs (e.g., "10.6", "10.5", "10.2.1") and associated metadata.  
+  - Artifacts stored in S3 and loaded at container startup.
 
-- **CLI Chat Interface**  
-  Launch via `cli.py` to start an interactive, conversational session with the assistant.
+- **Retrieval Pipeline**  
+  Embeddings generated via `all-MiniLM-L6-v2` (or `text-embedding-3-small` as an alternative).  
+  Retrieves top-k relevant chunks from FAISS and enriches them with full requirement text from SQLite.
 
-- **Tool Auto-Discovery**  
-  The agent dynamically detects available tools and routes commands accordingly.
+- **Planning Layer**  
+  Before invoking tools, the LLM determines whether they’re needed:  
+  - If not, skips tools and answers directly.  
+  - If needed, selects the tool (`get` or `search`), prepares arguments, invokes it, and uses the results to compose the final answer.
+
+- **Execution Layer (Tool Dispatcher & MCP Server)**  
+  - Validates tool calls and routes them to isolated execution.  
+  - Supported tools:
+    - `get` — fetch specific requirements by ID from SQLite.
+    - `search` — semantic search in vector store, enriched from SQLite.
+    - (Planned) `generate_pdf_report`
+    - (Planned) `parse_uploaded_document`
 
 ---
 
@@ -50,7 +69,6 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 ├── data/                         # Vector index and document chunks
 │   ├── pci_chunks.txt
 │   ├── pci_index.faiss
-│   └── mapping.pkl
 │
 ├── mcp_server/                   # FastAPI backend for tool execution
 │   ├── main.py
@@ -86,6 +104,9 @@ It combines a Retrieval-Augmented Generation (RAG) pipeline with modular tool ex
 
 ## 🚀 How to Run
 
+If deployed to AWS Amplify, simply visit your Amplify app's URL to use the Web UI.
+To run locally:
+
 1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
@@ -106,7 +127,6 @@ python cli.py
 
    Or test using the mock backend:
    ```bash
-   export MCP_API_URL="http://<your-mcp-host>:<port>"
 python cli.py --mock -m "Compare 1.1.2 and 12.5.1"
    ```
 
@@ -169,7 +189,8 @@ By default, the agent sends prompts to a local LLM endpoint. You can override th
 | `LLM_API_URL`  | URL of the LLM backend                        | `http://localhost:11434/api/generate`                |
 | `LLM_MODEL`    | Model identifier passed to the backend        | `mistral:7b-instruct-v0.3-q4_K_M`                    |
 | `FAISS_INDEX_PATH`   | Path to FAISS index file for document retrieval    | `data/pci_index.faiss`     |
-| `FAISS_MAPPING_PATH` | Path to mapping.pkl file used with FAISS           | `data/mapping.pkl`         |
+| `SQLITE_DB_PATH`    | Path to SQLite database for requirement text | `data/pci_requirements.db` |
+| `S3_BUCKET`         | S3 bucket name for artifact storage       | *(required for AWS deployment)* |
 
 You can define them in your shell before launching the CLI:
 
@@ -178,9 +199,7 @@ export LLM_API_URL="http://localhost:11434/api/generate"
 export LLM_MODEL="mistral:7b-instruct-v0.3-q4_K_M"
 export MCP_API_URL="http://localhost:8000"
 export FAISS_INDEX_PATH="data/custom_index.faiss"
-export FAISS_MAPPING_PATH="data/custom_mapping.pkl"
 # Optional: set MCP server URL if not running on localhost:8000
-export MCP_API_URL="http://<your-mcp-host>:<port>"
 
 python cli.py
 ```
@@ -274,3 +293,13 @@ A: Make sure your local model (e.g., Ollama) is running.
 
 This project is licensed under the [Apache License 2.0](LICENSE).
 
+
+
+## 📦 Deployment (AWS)
+
+1. **Build container image** and push to Amazon ECR.
+2. **Create AWS App Runner service**:  
+   - Set `/healthz` as health check path.  
+   - Service listens on port 8080 internally.  
+   - Attach IAM role with permissions for ECR and S3 (`ecr:GetAuthorizationToken`, `ecr:BatchGetImage`, `s3:GetObject`).
+3. **Deploy frontend** via AWS Amplify, configured with backend URL.
