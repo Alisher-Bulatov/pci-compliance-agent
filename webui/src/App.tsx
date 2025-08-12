@@ -1,4 +1,3 @@
-// webui/src/App.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { askFull, askMockFull } from "./lib/api";
 import { API_BASE } from "./config";
@@ -12,12 +11,42 @@ type EventLine  = StageEvent | TokenEvent | InfoEvent | ErrorEvent | Record<stri
 type ChatTurn = {
   id: string;
   question: string;
-  materials: string; // tool summaries before reasoning stage
-  answer: string;    // tokens after reasoning stage
+  materials: string; // tool requests + tool results
+  answer: string;    // reasoning/final answer
   done: boolean;
   error?: string;
-  meta?: string;     // optional info footer (timings, etc.)
+  meta?: string;
 };
+
+enum Phase {
+  Pre = "pre",
+  Tools = "tools",
+  Answer = "answer",
+}
+
+const NOISY_MATERIALS = [
+  /^✅?\s*Done\b/i,
+  /^Mock response completed\b/i,
+  /^\s*Routing\b/i,
+  /^\s*Running\b/i,
+  /^\s*Reasoning based on tool results/i, // this is our switch anyway
+];
+
+function isToolsStage(label: string) {
+  return /Sending query|Tool|MCP|Routing|Running\b|compare_requirements|get\(|get:|search/i.test(label);
+}
+function isAnswerStage(label: string) {
+  return /Reasoning based on|Producing final answer|Answer\b/i.test(label);
+}
+function looksLikeAnswerToken(text: string) {
+  // Sometimes there is no stage flip; answer starts with these cues
+  return /^\s*(Answer|Client)\b[:\-]/i.test(text);
+}
+function scrubMaterials(s: string) {
+  const lines = s.split(/\r?\n/);
+  const kept = lines.filter((ln) => !NOISY_MATERIALS.some((rx) => rx.test(ln.trim())));
+  return kept.join("\n");
+}
 
 export default function App() {
   const [useLive, setUseLive] = useState(true);
@@ -26,7 +55,6 @@ export default function App() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // auto-scroll to bottom when content grows
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
@@ -37,62 +65,78 @@ export default function App() {
     setTurns((t) => [...t, next]);
     setBusy(true);
 
-    // we treat tokens before the “Reasoning based on…” stage as materials
-    let inAnswerPhase = false;
+    let phase: Phase = Phase.Pre;
+    let lastEndedWithNewline = true;
 
     const onLine = (e: EventLine) => {
-      // stage switches
       if (e?.type === "stage") {
-        const label = (e as StageEvent).label || "";
-        // Switch to final reasoning phase when we hit this stage
-        if (/Reasoning based on tool results|Producing final answer|Answer/i.test(label)) {
-          inAnswerPhase = true;
+        const label = ((e as StageEvent).label || "").trim();
+
+        // Move to tools phase when LLM is preparing or executing tools
+        if (isToolsStage(label) && phase !== Phase.Answer) {
+          phase = Phase.Tools;
+          return;
+        }
+        // Move to answer phase when LLM says it's reasoning / answering
+        if (isAnswerStage(label)) {
+          phase = Phase.Answer;
+          return;
         }
         return;
       }
 
       if (e?.type === "token") {
+        const text = (e as TokenEvent).text ?? "";
+        // If we haven't switched but token clearly looks like the start of answer, flip now
+        if (phase !== Phase.Answer && looksLikeAnswerToken(text)) {
+          phase = Phase.Answer;
+        }
+
         setTurns((list) =>
-          list.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  [inAnswerPhase ? "answer" : "materials"]: (inAnswerPhase ? t.answer : t.materials) + (e as TokenEvent).text,
-                }
-              : t
-          )
+          list.map((t) => {
+            if (t.id !== id) return t;
+            if (phase === Phase.Answer) {
+              return { ...t, answer: t.answer + text };
+            }
+            // Default to materials for Pre/Tools
+            return { ...t, materials: t.materials + text };
+          })
         );
+
+        lastEndedWithNewline = /\n$/.test(text);
         return;
       }
 
       if (e?.type === "info") {
         setTurns((list) =>
-          list.map((t) => (t.id === id ? { ...t, meta: ((t.meta ?? "") + ((e as InfoEvent).message || "")).trim() } : t))
+          list.map((t) =>
+            t.id === id ? { ...t, meta: ((t.meta ?? "") + ((e as InfoEvent).message || "")).trim() } : t
+          )
         );
         return;
       }
 
       if (e?.type === "error") {
         setTurns((list) =>
-          list.map((t) => (t.id === id ? { ...t, error: (e as ErrorEvent).message ?? "Unknown error", done: true } : t))
+          list.map((t) =>
+            t.id === id ? { ...t, error: (e as ErrorEvent).message ?? "Unknown error", done: true } : t
+          )
         );
         setBusy(false);
         return;
       }
-
-      // ignore any other noise lines
     };
 
     try {
       const ask = useLive ? askFull : askMockFull;
       await ask({ message: question }, onLine);
-      // final tidy
+
       setTurns((list) =>
         list.map((t) =>
           t.id === id
             ? {
                 ...t,
-                materials: t.materials.trim(),
+                materials: scrubMaterials(t.materials.trim()),
                 answer: t.answer.trim(),
                 done: true,
               }
@@ -118,7 +162,7 @@ export default function App() {
 
   const header = useMemo(
     () => (
-      <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #eee" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #1b2438" }}>
         <div style={{ fontWeight: 700 }}>PCI DSS Compliance Agent (Mock Chat)</div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>Backend: {API_BASE}</div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
@@ -134,10 +178,8 @@ export default function App() {
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0b0e14" }}>
-      {/* Header */}
       <div style={{ background: "#0f1420", color: "#eaeef7" }}>{header}</div>
 
-      {/* Scrollable chat area */}
       <div ref={scrollerRef} style={{ flex: 1, overflow: "auto", padding: 16 }}>
         {turns.map((t) => (
           <div key={t.id} style={{ display: "grid", gap: 8, margin: "10px auto 24px", maxWidth: 900 }}>
@@ -160,7 +202,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Retrieved materials */}
+            {/* Retrieved materials (request + results) */}
             {!!t.materials && (
               <details style={{ background: "#0f1420", border: "1px solid #23314d", borderRadius: 10, padding: "8px 10px" }} open>
                 <summary style={{ color: "#9fb5dd", cursor: "pointer", fontWeight: 600 }}>Retrieved materials</summary>
@@ -183,7 +225,7 @@ export default function App() {
               </details>
             )}
 
-            {/* assistant bubble */}
+            {/* assistant bubble (final answer) */}
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div
                 style={{
@@ -202,16 +244,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* meta */}
-            {!!t.meta && (
-              <div style={{ color: "#8ea5c9", fontSize: 12, marginLeft: 6 }}>ⓘ {t.meta}</div>
-            )}
+            {!!t.meta && <div style={{ color: "#8ea5c9", fontSize: 12, marginLeft: 6 }}>ⓘ {t.meta}</div>}
           </div>
         ))}
 
-        {busy && (
-          <div style={{ color: "#9fb5dd", textAlign: "center", padding: 8, opacity: 0.8 }}>Streaming…</div>
-        )}
+        {busy && <div style={{ color: "#9fb5dd", textAlign: "center", padding: 8, opacity: 0.8 }}>Streaming…</div>}
       </div>
 
       {/* Composer */}
