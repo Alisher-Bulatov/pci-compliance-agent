@@ -1,11 +1,11 @@
-// webui/src/config.ts
-// Single source of truth for the backend base URL.
+// single source of truth for the backend base URL.
 
 function stripTrailingSlash(s: string) {
   return s.replace(/\/+$/, "");
 }
 
 // Read Vite env baked at build time (Amplify: VITE_API_BASE_URL)
+// Use the exact literal so Vite replaces it at build time
 const raw = (import.meta.env.VITE_API_BASE_URL ?? "").toString().trim();
 
 // Dev fallback only if not set at build time
@@ -17,7 +17,7 @@ try {
   if (typeof window !== "undefined") {
     const u = new URL(base, window.location.origin);
     if (window.location.protocol === "https:" && u.protocol === "http:") {
-      base = "https://" + u.host + stripTrailingSlash(u.pathname);
+      base = "https:" + u.host + stripTrailingSlash(u.pathname);
     }
   }
 } catch {
