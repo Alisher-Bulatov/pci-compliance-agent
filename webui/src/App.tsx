@@ -1,197 +1,254 @@
 // webui/src/App.tsx
-import { useRef, useState } from "react";
-import { API_BASE } from "./config";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { askFull, askMockFull } from "./lib/api";
+import { API_BASE } from "./config";
 
-type EventLine =
-  | { type: "token"; text: string }
-  | { type: "stage"; label: string }
-  | { type: "info"; message: string }
-  | { type: "error"; message: string }
-  | Record<string, unknown>;
+type StageEvent = { type: "stage"; label: string };
+type TokenEvent = { type: "token"; text: string };
+type InfoEvent  = { type: "info"; message: string };
+type ErrorEvent = { type: "error"; stage?: string; message: string };
+type EventLine  = StageEvent | TokenEvent | InfoEvent | ErrorEvent | Record<string, unknown>;
 
-const BUILD_TAG = "ui-0812g";
+type ChatTurn = {
+  id: string;
+  question: string;
+  materials: string; // tool summaries before reasoning stage
+  answer: string;    // tokens after reasoning stage
+  done: boolean;
+  error?: string;
+  meta?: string;     // optional info footer (timings, etc.)
+};
 
 export default function App() {
-  const [useLive, setUseLive] = useState(false);
-  const [query, setQuery] = useState("");
-  const [systemLog, setSystemLog] = useState<string[]>([]);
-  const [answer, setAnswer] = useState<string>("");
+  const [useLive, setUseLive] = useState(true);
+  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
-  function reset() {
-    setSystemLog([]);
-    setAnswer("");
-    setQuery("");
-    inputRef.current?.focus();
-  }
+  // auto-scroll to bottom when content grows
+  useEffect(() => {
+    scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
+  }, [turns, busy]);
 
-  function handleLine(obj: EventLine) {
-    if (!obj || typeof obj !== "object") return;
-
-    if ((obj as any).type === "stage") {
-      setSystemLog((l) => [...l, String((obj as any).label || "")]);
-      return;
-    }
-    if ((obj as any).type === "info") {
-      setSystemLog((l) => [...l, `ℹ️ ${(obj as any).message || ""}`]);
-      return;
-    }
-    if ((obj as any).type === "error") {
-      setSystemLog((l) => [...l, `❌ ${(obj as any).message || ""}`]);
-      return;
-    }
-    if ((obj as any).type === "token") {
-      setAnswer((s) => s + String((obj as any).text || ""));
-      return;
-    }
-    // Fallback: dump unknown events into system log for debugging
-    setSystemLog((l) => [...l, JSON.stringify(obj)]);
-  }
-
-  async function send(q?: string) {
-    const message = (q ?? query).trim();
-    if (!message || busy) return;
-
+  const startAsk = async (question: string) => {
+    const id = String(Date.now());
+    const next: ChatTurn = { id, question, materials: "", answer: "", done: false };
+    setTurns((t) => [...t, next]);
     setBusy(true);
-    setSystemLog((l) => [...l, `Sending query: "${message}"`]);
-    setAnswer("");
 
-    const payload = { message };
+    // we treat tokens before the “Reasoning based on…” stage as materials
+    let inAnswerPhase = false;
+
+    const onLine = (e: EventLine) => {
+      // stage switches
+      if (e?.type === "stage") {
+        const label = (e as StageEvent).label || "";
+        // Switch to final reasoning phase when we hit this stage
+        if (/Reasoning based on tool results|Producing final answer|Answer/i.test(label)) {
+          inAnswerPhase = true;
+        }
+        return;
+      }
+
+      if (e?.type === "token") {
+        setTurns((list) =>
+          list.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  [inAnswerPhase ? "answer" : "materials"]: (inAnswerPhase ? t.answer : t.materials) + (e as TokenEvent).text,
+                }
+              : t
+          )
+        );
+        return;
+      }
+
+      if (e?.type === "info") {
+        setTurns((list) =>
+          list.map((t) => (t.id === id ? { ...t, meta: ((t.meta ?? "") + ((e as InfoEvent).message || "")).trim() } : t))
+        );
+        return;
+      }
+
+      if (e?.type === "error") {
+        setTurns((list) =>
+          list.map((t) => (t.id === id ? { ...t, error: (e as ErrorEvent).message ?? "Unknown error", done: true } : t))
+        );
+        setBusy(false);
+        return;
+      }
+
+      // ignore any other noise lines
+    };
 
     try {
-      const onLine = (obj: any) => handleLine(obj);
-      if (useLive) {
-        await askFull(payload, onLine);
-      } else {
-        await askMockFull(payload, onLine);
-      }
-      setSystemLog((l) => [...l, "✅ Done"]);
-    } catch (e: any) {
-      setSystemLog((l) => [...l, `❌ Request failed: ${e?.message || e}`]);
+      const ask = useLive ? askFull : askMockFull;
+      await ask({ message: question }, onLine);
+      // final tidy
+      setTurns((list) =>
+        list.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                materials: t.materials.trim(),
+                answer: t.answer.trim(),
+                done: true,
+              }
+            : t
+        )
+      );
+    } catch (err: any) {
+      setTurns((list) =>
+        list.map((t) => (t.id === id ? { ...t, error: err?.message ?? String(err), done: true } : t))
+      );
     } finally {
       setBusy(false);
-      inputRef.current?.focus();
     }
-  }
+  };
 
-  function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") send();
-  }
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = input.trim();
+    if (!q || busy) return;
+    setInput("");
+    startAsk(q);
+  };
+
+  const header = useMemo(
+    () => (
+      <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #eee" }}>
+        <div style={{ fontWeight: 700 }}>PCI DSS Compliance Agent (Mock Chat)</div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Backend: {API_BASE}</div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
+            Use Live Mode
+          </label>
+        </div>
+      </div>
+    ),
+    [useLive]
+  );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", color: "#e5e7eb" }}>
-      <div style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
-        <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>
-            <span style={{ marginRight: 8 }}>🛡️</span> PCI DSS Compliance Agent (Mock Chat)
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
-              <span>Use Live Mode</span>
-            </label>
-          </div>
-        </header>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0b0e14" }}>
+      {/* Header */}
+      <div style={{ background: "#0f1420", color: "#eaeef7" }}>{header}</div>
 
-        <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 8 }}>
-          Backend: <code>{API_BASE}</code> · Build: <code>{BUILD_TAG}</code>
-        </div>
+      {/* Scrollable chat area */}
+      <div ref={scrollerRef} style={{ flex: 1, overflow: "auto", padding: 16 }}>
+        {turns.map((t) => (
+          <div key={t.id} style={{ display: "grid", gap: 8, margin: "10px auto 24px", maxWidth: 900 }}>
+            {/* user bubble */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div
+                style={{
+                  background: "#1a2030",
+                  color: "#cfe1ff",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  borderTopRightRadius: 4,
+                  maxWidth: "80%",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+                title="You"
+              >
+                {t.question}
+              </div>
+            </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {/* Retrieved materials */}
+            {!!t.materials && (
+              <details style={{ background: "#0f1420", border: "1px solid #23314d", borderRadius: 10, padding: "8px 10px" }} open>
+                <summary style={{ color: "#9fb5dd", cursor: "pointer", fontWeight: 600 }}>Retrieved materials</summary>
+                <div
+                  style={{
+                    color: "#c6d4ef",
+                    marginTop: 8,
+                    background: "#0b0e14",
+                    border: "1px solid #1e2a44",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: 13,
+                  }}
+                >
+                  {t.materials}
+                </div>
+              </details>
+            )}
+
+            {/* assistant bubble */}
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div
+                style={{
+                  background: "#111826",
+                  color: "#f4f7ff",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  borderTopLeftRadius: 4,
+                  maxWidth: "80%",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+                title="Assistant"
+              >
+                {t.error ? `❌ ${t.error}` : t.answer || (t.done ? "…" : "Thinking…")}
+              </div>
+            </div>
+
+            {/* meta */}
+            {!!t.meta && (
+              <div style={{ color: "#8ea5c9", fontSize: 12, marginLeft: 6 }}>ⓘ {t.meta}</div>
+            )}
+          </div>
+        ))}
+
+        {busy && (
+          <div style={{ color: "#9fb5dd", textAlign: "center", padding: 8, opacity: 0.8 }}>Streaming…</div>
+        )}
+      </div>
+
+      {/* Composer */}
+      <form onSubmit={onSubmit} style={{ padding: 12, borderTop: "1px solid #131a28", background: "#0f1420" }}>
+        <div style={{ display: "flex", gap: 8, maxWidth: 900, margin: "0 auto" }}>
           <input
-            ref={inputRef}
-            placeholder='Ask something… e.g., "Is 3.2.1 focused on storage vs transmission?"'
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={onKey}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask a PCI DSS question…"
             disabled={busy}
             style={{
               flex: 1,
-              background: "#111827",
-              color: "#e5e7eb",
-              border: "1px solid #374151",
-              borderRadius: 10,
-              padding: "12px 14px",
+              background: "#0b0e14",
+              color: "#eaeef7",
+              border: "1px solid #1e2a44",
+              borderRadius: 8,
+              padding: "10px 12px",
               outline: "none",
             }}
           />
           <button
-            onClick={() => send()}
-            disabled={busy || !query.trim()}
+            type="submit"
+            disabled={busy || !input.trim()}
             style={{
-              background: busy ? "#334155" : "#6366f1",
+              background: busy ? "#22304b" : "#3559e6",
               color: "white",
-              border: 0,
-              borderRadius: 10,
+              border: "none",
+              borderRadius: 8,
               padding: "10px 14px",
+              cursor: busy ? "not-allowed" : "pointer",
               fontWeight: 600,
-              cursor: busy ? "not-allowed" : "pointer",
-              minWidth: 88,
             }}
           >
-            {busy ? "Sending…" : "Send"}
-          </button>
-          <button
-            onClick={reset}
-            disabled={busy}
-            style={{
-              background: "#0b1220",
-              color: "#cbd5e1",
-              border: "1px solid #334155",
-              borderRadius: 10,
-              padding: "10px 14px",
-              cursor: busy ? "not-allowed" : "pointer",
-            }}
-          >
-            Reset
+            Send
           </button>
         </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <section>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>System</div>
-            <div
-              style={{
-                background: "#0b1220",
-                border: "1px solid #1f2937",
-                borderRadius: 12,
-                padding: 12,
-                minHeight: 220,
-                whiteSpace: "pre-wrap",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                fontSize: 13,
-              }}
-            >
-              {systemLog.length === 0 ? (
-                <span style={{ color: "#94a3b8" }}>{busy ? "Streaming…" : "Nothing yet."}</span>
-              ) : (
-                systemLog.map((l, i) => <div key={i}>{l}</div>)
-              )}
-            </div>
-          </section>
-
-          <section>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Client</div>
-            <div
-              style={{
-                background: "#0b1220",
-                border: "1px solid #1f2937",
-                borderRadius: 12,
-                padding: 12,
-                minHeight: 220,
-                whiteSpace: "pre-wrap",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                fontSize: 15,
-                lineHeight: 1.5,
-              }}
-            >
-              {answer ? <>{answer}</> : <span style={{ color: "#ef4444" }}>{busy ? "Streaming…" : "No output yet."}</span>}
-            </div>
-          </section>
-        </div>
-      </div>
+      </form>
     </div>
   );
 }
