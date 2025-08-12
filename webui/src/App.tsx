@@ -18,18 +18,20 @@ type ChatTurn = {
   meta?: string;
 };
 
-enum Phase {
-  Pre = "pre",
-  Tools = "tools",
-  Answer = "answer",
-}
+// erasable-friendly alternative to enum
+type Phase = "pre" | "tools" | "answer";
+const PHASE: Record<Uppercase<Phase>, Phase> = {
+  PRE: "pre",
+  TOOLS: "tools",
+  ANSWER: "answer",
+};
 
 const NOISY_MATERIALS = [
   /^✅?\s*Done\b/i,
   /^Mock response completed\b/i,
   /^\s*Routing\b/i,
   /^\s*Running\b/i,
-  /^\s*Reasoning based on tool results/i, // this is our switch anyway
+  /^\s*Reasoning based on tool results/i,
 ];
 
 function isToolsStage(label: string) {
@@ -39,7 +41,6 @@ function isAnswerStage(label: string) {
   return /Reasoning based on|Producing final answer|Answer\b/i.test(label);
 }
 function looksLikeAnswerToken(text: string) {
-  // Sometimes there is no stage flip; answer starts with these cues
   return /^\s*(Answer|Client)\b[:\-]/i.test(text);
 }
 function scrubMaterials(s: string) {
@@ -65,21 +66,17 @@ export default function App() {
     setTurns((t) => [...t, next]);
     setBusy(true);
 
-    let phase: Phase = Phase.Pre;
-    let lastEndedWithNewline = true;
+    let phase: Phase = PHASE.PRE;
 
     const onLine = (e: EventLine) => {
       if (e?.type === "stage") {
         const label = ((e as StageEvent).label || "").trim();
-
-        // Move to tools phase when LLM is preparing or executing tools
-        if (isToolsStage(label) && phase !== Phase.Answer) {
-          phase = Phase.Tools;
+        if (isToolsStage(label) && phase !== PHASE.ANSWER) {
+          phase = PHASE.TOOLS;
           return;
         }
-        // Move to answer phase when LLM says it's reasoning / answering
         if (isAnswerStage(label)) {
-          phase = Phase.Answer;
+          phase = PHASE.ANSWER;
           return;
         }
         return;
@@ -87,23 +84,19 @@ export default function App() {
 
       if (e?.type === "token") {
         const text = (e as TokenEvent).text ?? "";
-        // If we haven't switched but token clearly looks like the start of answer, flip now
-        if (phase !== Phase.Answer && looksLikeAnswerToken(text)) {
-          phase = Phase.Answer;
+        if (phase !== PHASE.ANSWER && looksLikeAnswerToken(text)) {
+          phase = PHASE.ANSWER;
         }
 
         setTurns((list) =>
           list.map((t) => {
             if (t.id !== id) return t;
-            if (phase === Phase.Answer) {
+            if (phase === PHASE.ANSWER) {
               return { ...t, answer: t.answer + text };
             }
-            // Default to materials for Pre/Tools
             return { ...t, materials: t.materials + text };
           })
         );
-
-        lastEndedWithNewline = /\n$/.test(text);
         return;
       }
 
@@ -202,7 +195,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Retrieved materials (request + results) */}
+            {/* Retrieved materials */}
             {!!t.materials && (
               <details style={{ background: "#0f1420", border: "1px solid #23314d", borderRadius: 10, padding: "8px 10px" }} open>
                 <summary style={{ color: "#9fb5dd", cursor: "pointer", fontWeight: 600 }}>Retrieved materials</summary>
@@ -225,7 +218,7 @@ export default function App() {
               </details>
             )}
 
-            {/* assistant bubble (final answer) */}
+            {/* assistant bubble */}
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div
                 style={{
@@ -251,7 +244,6 @@ export default function App() {
         {busy && <div style={{ color: "#9fb5dd", textAlign: "center", padding: 8, opacity: 0.8 }}>Streaming…</div>}
       </div>
 
-      {/* Composer */}
       <form onSubmit={onSubmit} style={{ padding: 12, borderTop: "1px solid #131a28", background: "#0f1420" }}>
         <div style={{ display: "flex", gap: 8, maxWidth: 900, margin: "0 auto" }}>
           <input
