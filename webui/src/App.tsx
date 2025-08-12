@@ -3,7 +3,7 @@ import { askFull, askMockFull } from "./lib/api";
 import { API_BASE } from "./config";
 
 type StageEvent = { type: "stage"; label: string };
-type TokenEvent = { type: "token"; text: string };
+type TokenEvent = { type: "token"; text: string; segment?: "materials" | "answer" };
 type InfoEvent  = { type: "info"; message: string };
 type ErrorEvent = { type: "error"; stage?: string; message: string };
 type EventLine  = StageEvent | TokenEvent | InfoEvent | ErrorEvent | Record<string, unknown>;
@@ -18,13 +18,8 @@ type ChatTurn = {
   meta?: string;
 };
 
-// erasable-friendly alternative to enum
 type Phase = "pre" | "tools" | "answer";
-const PHASE: Record<Uppercase<Phase>, Phase> = {
-  PRE: "pre",
-  TOOLS: "tools",
-  ANSWER: "answer",
-};
+const PHASE: Record<Uppercase<Phase>, Phase> = { PRE: "pre", TOOLS: "tools", ANSWER: "answer" };
 
 const NOISY_MATERIALS = [
   /^✅?\s*Done\b/i,
@@ -35,13 +30,10 @@ const NOISY_MATERIALS = [
 ];
 
 function isToolsStage(label: string) {
-  return /Sending query|Tool|MCP|Routing|Running\b|compare_requirements|get\(|get:|search/i.test(label);
+  return /Tools\b|Sending query|Tool|MCP|Routing|Running\b|compare_requirements|get\(|get:|search/i.test(label);
 }
 function isAnswerStage(label: string) {
-  return /Reasoning based on|Producing final answer|Answer\b/i.test(label);
-}
-function looksLikeAnswerToken(text: string) {
-  return /^\s*(Answer|Client)\b[:\-]/i.test(text);
+  return /^Answer\b/i.test(label) || /Producing final answer|Reasoning based on/i.test(label);
 }
 function scrubMaterials(s: string) {
   const lines = s.split(/\r?\n/);
@@ -69,6 +61,7 @@ export default function App() {
     let phase: Phase = PHASE.PRE;
 
     const onLine = (e: EventLine) => {
+      // Stage changes
       if (e?.type === "stage") {
         const label = ((e as StageEvent).label || "").trim();
         if (isToolsStage(label) && phase !== PHASE.ANSWER) {
@@ -82,18 +75,20 @@ export default function App() {
         return;
       }
 
+      // Segment-aware token routing
       if (e?.type === "token") {
-        const text = (e as TokenEvent).text ?? "";
-        if (phase !== PHASE.ANSWER && looksLikeAnswerToken(text)) {
-          phase = PHASE.ANSWER;
-        }
+        const { text = "", segment } = e as TokenEvent;
 
         setTurns((list) =>
           list.map((t) => {
             if (t.id !== id) return t;
-            if (phase === PHASE.ANSWER) {
-              return { ...t, answer: t.answer + text };
-            }
+
+            // 1) If segment present, trust it
+            if (segment === "materials") return { ...t, materials: t.materials + text };
+            if (segment === "answer")    return { ...t, answer: t.answer + text };
+
+            // 2) Otherwise fall back to current phase
+            if (phase === PHASE.ANSWER)  return { ...t, answer: t.answer + text };
             return { ...t, materials: t.materials + text };
           })
         );
@@ -173,7 +168,7 @@ export default function App() {
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0b0e14" }}>
       <div style={{ background: "#0f1420", color: "#eaeef7" }}>{header}</div>
 
-      <div ref={scrollerRef} style={{ flex: 1, overflow: "auto", padding: 16 }}>
+      <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
         {turns.map((t) => (
           <div key={t.id} style={{ display: "grid", gap: 8, margin: "10px auto 24px", maxWidth: 900 }}>
             {/* user bubble */}
@@ -189,7 +184,6 @@ export default function App() {
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
                 }}
-                title="You"
               >
                 {t.question}
               </div>
@@ -231,7 +225,6 @@ export default function App() {
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
                 }}
-                title="Assistant"
               >
                 {t.error ? `❌ ${t.error}` : t.answer || (t.done ? "…" : "Thinking…")}
               </div>
@@ -244,6 +237,7 @@ export default function App() {
         {busy && <div style={{ color: "#9fb5dd", textAlign: "center", padding: 8, opacity: 0.8 }}>Streaming…</div>}
       </div>
 
+      {/* Composer */}
       <form onSubmit={onSubmit} style={{ padding: 12, borderTop: "1px solid #131a28", background: "#0f1420" }}>
         <div style={{ display: "flex", gap: 8, maxWidth: 900, margin: "0 auto" }}>
           <input

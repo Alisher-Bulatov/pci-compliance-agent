@@ -1,7 +1,7 @@
 # mcp_server/pipeline.py
 
 import json
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List
 
 from tools import get_tool_overview
 from agent.llm_wrapper import query_llm
@@ -15,15 +15,19 @@ MAX_PER_OBS_CHARS = 6000
 MAX_TOTAL_OBS_CHARS = 24000
 
 
-def _truncate_for_prompt(s: str, limit: int) -> str:
-    if s is None:
+def _truncate_for_prompt(s: str | None, limit: int) -> str:
+    if not s:
         return ""
     if len(s) <= limit:
         return s
     return s[: limit - 20] + "... [truncated]"
 
 
-def _format_tool_output(tool_name: str, result_obj: Any, tool_input: Dict[str, Any] | None = None) -> str:
+def _format_tool_output(
+    tool_name: str,
+    result_obj: Any,
+    tool_input: Dict[str, Any] | None = None,
+) -> str:
     """
     Convert raw tool result to a human-friendly summary string.
     We DO NOT emit raw JSON to the chat.
@@ -35,7 +39,7 @@ def _format_tool_output(tool_name: str, result_obj: Any, tool_input: Dict[str, A
 
         if tool_name == "search":
             if isinstance(payload, list) and payload:
-                lines = []
+                lines: List[str] = []
                 for item in payload[:10]:  # cap to 10 items
                     if isinstance(item, dict):
                         rid = (item.get("id") or "").strip()
@@ -64,7 +68,7 @@ def _format_tool_output(tool_name: str, result_obj: Any, tool_input: Dict[str, A
                 return f"No requirement was found{suffix}.\n"
 
             items = payload if isinstance(payload, list) else [payload]
-            lines = []
+            lines: List[str] = []
             for item in items:
                 if isinstance(item, dict):
                     rid = (item.get("id") or "").strip()
@@ -114,7 +118,8 @@ async def run_full_pipeline(message: str):
     async for tok in token_stream:
         if decided:
             if plan_mode:
-                yield {"type": "token", "text": tok}
+                # This is plan narration → materials
+                yield {"type": "token", "segment": "materials", "text": tok}
             buffer += tok
             continue
 
@@ -133,7 +138,7 @@ async def run_full_pipeline(message: str):
                 decided = True
                 plan_mode = True
                 yield {"type": "stage", "label": "Routing"}
-                yield {"type": "token", "text": stripped}
+                yield {"type": "token", "segment": "materials", "text": stripped}
                 continue
 
         # Case 2: any non-space lead → it's the plan
@@ -141,7 +146,7 @@ async def run_full_pipeline(message: str):
             decided = True
             plan_mode = True
             yield {"type": "stage", "label": "Routing"}
-            yield {"type": "token", "text": stripped}
+            yield {"type": "token", "segment": "materials", "text": stripped}
             continue
 
     # Finalize plan text
@@ -151,7 +156,7 @@ async def run_full_pipeline(message: str):
     # If we never decided in-stream, decide now
     if not decided:
         if normalized == "skip":
-            # Smalltalk path — no plan display
+            # Smalltalk path — no tools
             smalltalk_prompt = format_prompt(
                 user_input=message,
                 context="",
@@ -162,18 +167,18 @@ async def run_full_pipeline(message: str):
             try:
                 token_stream = await query_llm(smalltalk_prompt, stream=True)
                 async for token in token_stream:
-                    yield {"type": "token", "text": token}
+                    yield {"type": "token", "segment": "answer", "text": token}
             except (ConnectionError, TimeoutError, RuntimeError) as e:
                 yield {"type": "error", "stage": "llm_smalltalk", "message": str(e)}
             return
         else:
             # Not skip, show the whole plan now
             yield {"type": "stage", "label": "Routing"}
-            yield {"type": "token", "text": plan_text + "\n"}
+            yield {"type": "token", "segment": "materials", "text": plan_text + "\n"}
     else:
         if plan_mode:
             # ensure newline after streamed plan
-            yield {"type": "token", "text": "\n"}
+            yield {"type": "token", "segment": "materials", "text": "\n"}
 
     # 2) Parse plan → actions OR skip
     try:
@@ -190,7 +195,7 @@ async def run_full_pipeline(message: str):
             try:
                 token_stream = await query_llm(smalltalk_prompt, stream=True)
                 async for token in token_stream:
-                    yield {"type": "token", "text": token}
+                    yield {"type": "token", "segment": "answer", "text": token}
             except (ConnectionError, TimeoutError, RuntimeError) as e:
                 yield {"type": "error", "stage": "llm_smalltalk", "message": str(e)}
             return
@@ -204,10 +209,10 @@ async def run_full_pipeline(message: str):
         }
         return
 
-    # (We don't use final_answer in this design.)
+    # We don't use final_answer in this design; if present, treat it as Answer now.
     if final_answer:
-        yield {"type": "stage", "label": "Producing final answer..."}
-        yield {"type": "token", "text": str(final_answer)}
+        yield {"type": "stage", "label": "Answer"}
+        yield {"type": "token", "segment": "answer", "text": str(final_answer)}
         return
 
     # Safety cap on action count
@@ -231,6 +236,9 @@ async def run_full_pipeline(message: str):
         return
 
     # 3) Execute actions sequentially
+    # --- New explicit Tools stage so UI can group materials cleanly
+    yield {"type": "stage", "label": "Tools"}
+
     for idx, action in enumerate(actions, 1):
         tool_name = action.get("tool_name")
         tool_input = action.get("tool_input", {})
@@ -260,7 +268,8 @@ async def run_full_pipeline(message: str):
 
         # Human-readable tool output (no raw JSON)
         summary = _format_tool_output(tool_name, result, tool_input=tool_input)
-        yield {"type": "token", "text": summary}
+        # Mark tool text as materials
+        yield {"type": "token", "segment": "materials", "text": summary}
 
         # Keep both raw and truncated strings for follow-up
         try:
@@ -290,9 +299,10 @@ async def run_full_pipeline(message: str):
             break
 
     # 4) Follow-up reasoning using all observations
-    yield {"type": "stage", "label": "Reasoning based on tool results..."}
-    tool_result_str = json.dumps(observations, ensure_ascii=False)
+    # --- Standardize the label so UI is deterministic
+    yield {"type": "stage", "label": "Answer"}
 
+    tool_result_str = json.dumps(observations, ensure_ascii=False)
     followup_prompt = format_prompt(
         user_input=message,
         context="",          # keep follow-up focused on observations
@@ -304,6 +314,6 @@ async def run_full_pipeline(message: str):
     try:
         token_stream = await query_llm(followup_prompt, stream=True)
         async for token in token_stream:
-            yield {"type": "token", "text": token}
+            yield {"type": "token", "segment": "answer", "text": token}
     except (ConnectionError, TimeoutError, RuntimeError) as e:
         yield {"type": "error", "stage": "llm_followup", "message": str(e)}
