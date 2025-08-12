@@ -6,7 +6,7 @@ function stripTrailingSlash(s: string) {
 }
 
 // Read Vite env baked at build time (Amplify: VITE_API_BASE_URL)
-const raw = String((import.meta as any)?.env?.VITE_API_BASE_URL ?? "").trim();
+const raw = (import.meta.env.VITE_API_BASE_URL ?? "").toString().trim();
 
 // Dev fallback only if not set at build time
 let base = raw && raw !== "undefined" ? raw : "http://localhost:8000";
