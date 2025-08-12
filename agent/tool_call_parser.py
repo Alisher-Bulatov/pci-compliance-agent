@@ -154,7 +154,7 @@ def extract_tool_call(text: str):
             query = payload[1:-1].strip()
             if not query:
                 raise ValueError("search expects a non-empty quoted string")
-            return [{"tool_name": "search", "tool_input": {"query": query}}]
+            return [{"tool_name": "search", "tool_input": {"q": query}}]
         raise ValueError('search expects a single quoted string, e.g. search:"topic"')
 
     raise ValueError(f"Unknown verb: {verb}")
