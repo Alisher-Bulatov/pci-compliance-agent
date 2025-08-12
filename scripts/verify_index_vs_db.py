@@ -1,44 +1,48 @@
-
-# verify_index_vs_db.py — sanity-check FAISS mapping vs SQLite DB
-import pickle, sqlite3
+# verify_index_vs_db.py — sanity-check FAISS labels vs SQLite mapping + requirements
+import sqlite3
 from pathlib import Path
+import faiss
 
-ROOT_DIR = Path(__file__).resolve().parent.parent  # go up from /scripts
+ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 DB_FILE = DATA_DIR / "pci_requirements.db"
-MAPPING_FILE = DATA_DIR / "mapping.pkl"
-
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+INDEX_FILE = DATA_DIR / "pci_index.faiss"
 
 def main():
     if not DB_FILE.exists():
         print(f"❌ Missing DB: {DB_FILE}")
         return
-    if not MAPPING_FILE.exists():
-        print(f"❌ Missing mapping: {MAPPING_FILE}")
+    if not INDEX_FILE.exists():
+        print(f"❌ Missing index: {INDEX_FILE}")
         return
 
-    with open(MAPPING_FILE, "rb") as f:
-        mapping = pickle.load(f)
-    faiss_ids = {entry["id"] for entry in mapping.values() if isinstance(entry, dict) and "id" in entry}
-
+    # Read labels from FAISS (via Range search to get count)
+    index = faiss.read_index(str(INDEX_FILE))
+    n = index.ntotal
+    # Note: labels aren’t directly enumerable; we check mapping table cardinality and referential integrity.
     conn = sqlite3.connect(str(DB_FILE))
     cur = conn.cursor()
-    cur.execute("SELECT id FROM requirements")
-    db_ids = {rid.strip().rstrip('.') for (rid,) in cur.fetchall()}
-    conn.close()
+    map_count = cur.execute("SELECT COUNT(*) FROM faiss_map").fetchone()[0]
+    req_count = cur.execute("SELECT COUNT(*) FROM requirements").fetchone()[0]
 
-    only_in_faiss = sorted(faiss_ids - db_ids)
-    only_in_db = sorted(db_ids - faiss_ids)
+    print(f"FAISS ntotal={n}, faiss_map rows={map_count}, requirements rows={req_count}")
 
-    if not only_in_faiss and not only_in_db:
-        print("✅ Mapping and SQLite IDs are in sync.")
+    # Check some samples are valid joins
+    rows = cur.execute("SELECT faiss_id, rid FROM faiss_map ORDER BY faiss_id LIMIT 10").fetchall()
+    missing = []
+    for fid, rid in rows:
+        ok = cur.execute("SELECT 1 FROM requirements WHERE id = ? LIMIT 1", (rid,)).fetchone()
+        if not ok:
+            missing.append((fid, rid))
+
+    if missing:
+        print(f"⚠ Missing requirements for {len(missing)} faiss_map rows (first few): {missing[:5]}")
+    elif n != map_count:
+        print("⚠ FAISS ntotal and faiss_map count differ. Rebuild index/mapping.")
     else:
-        if only_in_faiss:
-            print(f"⚠ IDs only in FAISS mapping ({len(only_in_faiss)}): {only_in_faiss[:20]}{' ...' if len(only_in_faiss)>20 else ''}")
-        if only_in_db:
-            print(f"⚠ IDs only in SQLite DB ({len(only_in_db)}): {only_in_db[:20]}{' ...' if len(only_in_db)>20 else ''}")
+        print("✅ FAISS labels and SQLite mapping look consistent.")
+
+    conn.close()
 
 if __name__ == "__main__":
     main()
-

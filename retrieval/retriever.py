@@ -1,65 +1,60 @@
-import pickle
 import threading
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from functools import lru_cache
 import os
+import sqlite3
+from typing import List, Dict, Any
 
-# Thread locks to prevent race condition on first load
+# Thread locks
 _index_lock = threading.Lock()
-_mapping_lock = threading.Lock()
 _embedder_lock = threading.Lock()
 
+def _env(name: str, default: str) -> str:
+    return (os.getenv(name, default) or "").strip()
 
 @lru_cache(maxsize=1)
 def get_index(path=None):
-    if path is None:
-        path = os.getenv("FAISS_INDEX_PATH", "data/pci_index.faiss")
+    p = path or _env("FAISS_INDEX_PATH", "data/pci_index.faiss")
     with _index_lock:
-        return faiss.read_index(path)
-
-
-@lru_cache(maxsize=1)
-def get_mapping(path=None):
-    if path is None:
-        path = os.getenv("FAISS_MAPPING_PATH", "data/mapping.pkl")
-    with _mapping_lock:
-        with open(path, "rb") as f:
-            return pickle.load(f)
-
+        return faiss.read_index(p)
 
 @lru_cache(maxsize=1)
 def get_embedder():
     with _embedder_lock:
-        return SentenceTransformer("all-MiniLM-L6-v2")
+        return SentenceTransformer(_env("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
 
+def _map_faiss_ids_to_rids(db_path: str, ids: List[int]) -> Dict[int, str]:
+    if not ids:
+        return {}
+    conn = sqlite3.connect(db_path)
+    try:
+        q = ",".join(["?"] * len(ids))
+        rows = conn.execute(f"SELECT faiss_id, rid FROM faiss_map WHERE faiss_id IN ({q})", ids).fetchall()
+        return {int(fid): rid for (fid, rid) in rows}
+    finally:
+        conn.close()
 
 class PCIDocumentRetriever:
-    def __init__(
-        self, index_path="data/pci_index.faiss", mapping_path="data/mapping.pkl"
-    ):
+    def __init__(self, index_path=None, db_path=None):
         self.index = get_index(index_path)
-        self.mapping = get_mapping(mapping_path)
         self.embedder = get_embedder()
+        self.db_path = db_path or _env("SQLITE_DB_PATH", "data/pci_requirements.db")
 
-    def retrieve(self, query, k=3):
-        query_vec = self.embedder.encode([query])
-        _, indices = self.index.search(np.array(query_vec).astype("float32"), k)
-        results = []
-
-        for idx in indices[0]:
-            if idx == -1:
-                continue
-            doc = self.mapping.get(idx)
-            if doc:
-                results.append(doc)
-
-        return results
-
+    def retrieve(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+        if not query or not isinstance(query, str):
+            return []
+        qv = np.asarray(self.embedder.encode([query]), dtype="float32")
+        D, I = self.index.search(qv, k)
+        ids = [int(x) for x in I[0].tolist() if x != -1]
+        if not ids:
+            return []
+        by_id = _map_faiss_ids_to_rids(self.db_path, ids)
+        # Minimal docs for downstream enrichment in tools/search.py
+        out = [{"id": rid} for fid in ids if (rid := by_id.get(fid))]
+        return out
 
 def clear_caches():
     get_index.cache_clear()
-    get_mapping.cache_clear()
     get_embedder.cache_clear()
-
