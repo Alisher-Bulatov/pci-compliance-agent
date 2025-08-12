@@ -1,179 +1,115 @@
 import json
+import re
+from typing import List, Any, Dict
 
-# Hard caps so someone can't make you fetch 10k IDs in one go
 MAX_IDS = 50
 
+# 1..12 followed by up to 3 dotted segments (1–2 digits each)
+_ID_RX = re.compile(r"\b(1[0-2]|[1-9])(?:\.(\d{1,2})){0,3}\b")
+
 def _is_valid_pci_id(s: str) -> bool:
-    """
-    Valid PCI ID rules (no regex):
-      - First segment: integer 1..12
-      - Then 0..3 dot-separated segments
-      - Each extra segment is 1..2 digits
-      Examples: 3, 10, 3.2, 3.2.1, 11.5.1.1
-      Non-examples: 13, v4.0.1, 3.x, 0.1, 1.2.3.4.5
-    """
     if not s or " " in s:
         return False
-    parts = s.split(".")
-    if not parts:
-        return False
+    return _ID_RX.fullmatch(s.strip()) is not None
 
-    # First part 1..12
-    p0 = parts[0]
-    if not p0.isdigit():
-        return False
-    n0 = int(p0)
-    if n0 < 1 or n0 > 12:
-        return False
-
-    # Up to 3 more parts, each 1..2 digits
-    tail = parts[1:]
-    if len(tail) > 3:
-        return False
-    for t in tail:
-        if not (t.isdigit() and 1 <= len(t) <= 2):
-            return False
-
-    return True
-
-
-def _dedupe_preserve_order(items):
+def _dedupe(ids: List[str]) -> List[str]:
     seen = set()
-    out = []
-    for x in items:
+    out: List[str] = []
+    for x in ids:
         if x not in seen:
             seen.add(x)
             out.append(x)
     return out
 
+def _extract_ids_loose(payload: str) -> List[str]:
+    if not payload:
+        return []
+    found = [m.group(0) for m in _ID_RX.finditer(payload)]
+    valid = [sid for sid in found if _is_valid_pci_id(sid)]
+    return _dedupe(valid)[:MAX_IDS]
 
-def extract_tool_call(text: str):
-    """
-    Parses compact planner output or 'skip'.
+def _parse_compact(text: str) -> Any:
+    s = (text or "").strip()
+    if not s:
+        raise ValueError("Empty planner output")
 
-    Accepts exactly one of:
-      - "skip" (any case, surrounding whitespace allowed)
-      - get:["6.5","1.2.1"]                # batch IDs (JSON array of strings)
-      - get:"6.5"                          # single ID (quoted string)
-      - get:"6.5","1.2.1"[,"..."]          # <-- tolerant CSV of quoted IDs (planner slop)
-      - search:"cryptographic key storage" # single quoted string
+    if s.startswith("{") or s.startswith("["):
+        try:
+            return json.loads(s)
+        except Exception:
+            pass
 
-    Returns:
-      - {"skip": True}  for skip
-      - list of action dicts: [{"tool_name": "...", "tool_input": {...}}]
-
-    Raises:
-      - ValueError on any other format.
-    """
-    if not isinstance(text, str):
-        raise ValueError("Planner output must be a string")
-
-    s = text.strip()
-
-    # 1) Direct skip detection
-    if s.lower() == "skip":
-        return {"skip": True}
-
-    # 2) Compact verb:payload parsing
     if ":" not in s:
-        raise ValueError("Planner output missing ':' and is not 'skip'")
+        if s.lower() == "skip":
+            return {"skip": True}
+        raise ValueError("Expected 'get:...' or 'search:...' or 'skip'")
 
     verb, payload = s.split(":", 1)
     verb = verb.strip().lower()
-    # normalize smart quotes
-    payload = payload.strip().replace("“", '"').replace("”", '"')
+    payload = payload.strip()
 
     if verb == "get":
-        # Strict batch: get:["6.5","1.2.1"]
-        if payload.startswith("["):
-            try:
-                ids = json.loads(payload)
-            except Exception as e:
-                raise ValueError(f"Invalid JSON array for get: {e}")
+        if payload.startswith("[") and payload.endswith("]"):
+            arr = json.loads(payload)
+            if not isinstance(arr, list):
+                raise ValueError("get expects a JSON array of IDs")
+            ids: List[str] = []
+            for x in arr:
+                if not isinstance(x, str):
+                    raise ValueError("get array must contain only strings")
+                if not _is_valid_pci_id(x.strip()):
+                    raise ValueError(f"Invalid PCI ID in array: {x}")
+                ids.append(x.strip())
+            ids = _dedupe(ids)[:MAX_IDS]
+            if not ids:
+                raise ValueError("get expects at least one ID")
+            return [{"tool_name": "get", "tool_input": {"ids": ids}}]
 
-            if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
-                raise ValueError("get expects a JSON array of strings")
-
-            cleaned = []
-            for x in ids:
-                x2 = x.strip()
-                if not x2:
-                    raise ValueError("get contains an empty ID")
-                if not _is_valid_pci_id(x2):
-                    raise ValueError(f"Invalid PCI ID: {x2}")
-                cleaned.append(x2)
-
-            cleaned = _dedupe_preserve_order(cleaned)
-            if len(cleaned) > MAX_IDS:
-                raise ValueError(f"Too many IDs in get (>{MAX_IDS})")
-
-            return [{"tool_name": "get", "tool_input": {"ids": cleaned}}]
-
-        # Tolerant CSV of quoted IDs: get:"2.2","2.3"[,"..."]
-        if payload.startswith('"') and payload.endswith('"') and '","' in payload:
-            # split on commas and enforce each token is a quoted string
+        # CSV of quoted strings: "10.6","10.5"
+        if '","' in payload:
             parts = [p.strip() for p in payload.split(",")]
             ids = []
             for part in parts:
                 if not (part.startswith('"') and part.endswith('"') and len(part) >= 2):
                     raise ValueError("get CSV expects only quoted strings")
-                ids.append(part[1:-1].strip())
-
-            if not ids:
-                raise ValueError("get expects at least one ID")
-
-            # validate & dedupe
-            cleaned = []
-            for sid in ids:
-                if not sid:
-                    raise ValueError("get contains an empty ID")
+                sid = part[1:-1].strip()
                 if not _is_valid_pci_id(sid):
                     raise ValueError(f"Invalid PCI ID: {sid}")
-                cleaned.append(sid)
+                ids.append(sid)
+            ids = _dedupe(ids)[:MAX_IDS]
+            return [{"tool_name": "get", "tool_input": {"ids": ids}}]
 
-            cleaned = _dedupe_preserve_order(cleaned)
-            if len(cleaned) > MAX_IDS:
-                raise ValueError(f"Too many IDs in get (>{MAX_IDS})")
+        # Tolerant: handles "10.6" "10.5", single-quoted CSV, bare IDs, commas, etc.
+        loose_ids = _extract_ids_loose(payload)
+        if loose_ids:
+            if len(loose_ids) == 1:
+                return [{"tool_name": "get", "tool_input": {"id": loose_ids[0]}}]
+            return [{"tool_name": "get", "tool_input": {"ids": loose_ids}}]
 
-            return [{"tool_name": "get", "tool_input": {"ids": cleaned}}]
-
-        # Single: get:"6.5"
-        if payload.startswith('"') and payload.endswith('"') and len(payload) >= 2:
-            single_id = payload[1:-1].strip()
-            if not single_id:
-                raise ValueError("get expects a non-empty ID")
-            if not _is_valid_pci_id(single_id):
-                raise ValueError(f"Invalid PCI ID: {single_id}")
-            return [{"tool_name": "get", "tool_input": {"ids": [single_id]}}]
-
-        raise ValueError('Invalid get payload. Use get:[...] or get:"id" or get:"id1","id2"')
+        raise ValueError(
+            'Invalid get payload. Use get:[...] or get:"id" or get:"id1","id2" or tolerant forms like get:"10.5" "10.6"'
+        )
 
     if verb == "search":
-        # search:"cryptographic key storage"
         if payload.startswith('"') and payload.endswith('"') and len(payload) >= 2:
             query = payload[1:-1].strip()
             if not query:
                 raise ValueError("search expects a non-empty quoted string")
             return [{"tool_name": "search", "tool_input": {"q": query}}]
-        raise ValueError('search expects a single quoted string, e.g. search:"topic"')
+        # tolerant fallback
+        q = payload.strip().strip('"')
+        if q:
+            return [{"tool_name": "search", "tool_input": {"q": q}}]
+        raise ValueError('search expects a query, e.g., search:"topic"')
 
     raise ValueError(f"Unknown verb: {verb}")
 
+def extract_tool_call(text: str):
+    return _parse_compact(text)
 
 def normalize_actions(parsed):
-    """
-    Returns (actions_list, final_answer_or_None).
-
-    Supported inputs:
-      - {"skip": True}                  → returns ([], None)
-      - list of {tool_name, tool_input} → returns (list, None)
-
-    Any other input raises ValueError (no JSON fallback in this mode).
-    """
     if isinstance(parsed, dict) and parsed.get("skip") is True:
         return [], None
-
     if isinstance(parsed, list):
         return parsed, None
-
     raise ValueError("Unrecognized tool call format (expected compact actions list or skip).")
