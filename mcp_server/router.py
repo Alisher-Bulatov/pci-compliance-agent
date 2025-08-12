@@ -8,40 +8,61 @@ from pydantic import BaseModel
 
 from agent.llm_wrapper import query_llm
 from mcp_server.pipeline import run_full_pipeline
-from retrieval.retriever import clear_caches
 
 router = APIRouter()
 
+# --- helpers ---------------------------------------------------------------
 
-# 🔹 GET /ask — Raw LLM response (for EventSource/browser dev)
+def _clear_caches_lazy():
+    # Lazy import so router import never drags in retrieval deps
+    from retrieval.retriever import clear_caches as _clear
+    _clear()
+
+
+# --- GET /ask — Raw LLM response (SSE/EventSource) -------------------------
+
 @router.get("/ask")
 async def ask_stream_handler(request: Request):
     message = request.query_params.get("message", "")
 
     async def event_stream():
-        async for token in query_llm(message, stream=True):
-            yield f"data: {token}\n\n"
+        try:
+            async for token in query_llm(message, stream=True):
+                # stop if client disconnected
+                if await request.is_disconnected():
+                    break
+                yield f"data: {token}\n\n"
+        except asyncio.CancelledError:
+            # client dropped; just exit quietly
+            pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-# 🔹 POST /ask_full — JSON ND streaming (structured events for CLI/frontend)
+# --- POST /ask_full — JSON ND streaming -----------------------------------
+
 class AskRequest(BaseModel):
     message: str
 
 
 @router.post("/ask_full")
-async def ask_full_handler(payload: AskRequest):
+async def ask_full_handler(payload: AskRequest, request: Request):
     message = payload.message
 
     async def stream():
-        async for item in run_full_pipeline(message):
-            yield json.dumps(item) + "\n"
+        try:
+            async for item in run_full_pipeline(message):
+                if await request.is_disconnected():
+                    break
+                yield json.dumps(item) + "\n"
+        except asyncio.CancelledError:
+            pass
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
-# 🔹 GET /ask_mock — mock LLM response (for EventSource/browser dev)
+# --- GET /ask_mock — mock SSE ---------------------------------------------
+
 @router.get("/ask_mock")
 def ask_mock_handler(request: Request):
     _message = request.query_params.get("message", "")
@@ -53,27 +74,25 @@ def ask_mock_handler(request: Request):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-# 🔹 POST /ask_mock_full — mock JSON ND streaming (structured events for CLI/frontend dev)
+# --- POST /ask_mock_full — mock NDJSON ------------------------------------
+
 @router.post("/ask_mock_full")
-async def ask_mock_full_handler(payload: AskRequest):
+async def ask_mock_full_handler(payload: AskRequest, request: Request):
     _message = payload.message
 
     async def stream():
         start = time.perf_counter()
 
-        #yield json.dumps(
-        #    {"type": "stage", "label": "Retrieving related requirements"}
-        #) + "\n"
         await asyncio.sleep(random.uniform(0.1, 0.3))
-
         yield json.dumps({"type": "stage", "label": "Thinking..."}) + "\n"
         await asyncio.sleep(random.uniform(0.1, 0.3))
 
         for token in ["This ", "is ", "a ", "mock ", "response."]:
+            if await request.is_disconnected():
+                break
             yield json.dumps({"type": "token", "text": token}) + "\n"
             await asyncio.sleep(random.uniform(0.05, 0.2))
 
-        # Randomized tool result
         sample_results = [
             {
                 "id": "1.1.2",
@@ -98,38 +117,30 @@ async def ask_mock_full_handler(payload: AskRequest):
                 },
             }
         ) + "\n"
-        await asyncio.sleep(random.uniform(0.1, 0.2))
 
-        # Blank line for readability before follow-up
         yield json.dumps({"type": "token", "text": "\n"}) + "\n"
 
-        # Randomized follow-up message
         followups = [
             "Hope that helps clarify your query.",
             "Let me know if you'd like to compare more.",
             "This should give you a quick overview.",
             "You're doing great — feel free to explore further.",
         ]
-        followup_phrase = random.choice(followups)
-        for word in followup_phrase.split():
+        for word in random.choice(followups).split():
+            if await request.is_disconnected():
+                break
             yield json.dumps({"type": "token", "text": word + " "}) + "\n"
             await asyncio.sleep(random.uniform(0.05, 0.15))
 
-        # Final info event
         elapsed = time.perf_counter() - start
-        yield json.dumps(
-            {
-                "type": "info",
-                "message": f"Mock response completed in {elapsed:.2f} seconds",
-            }
-        ) + "\n"
+        yield json.dumps({"type": "info", "message": f"Mock response completed in {elapsed:.2f} seconds"}) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
-# Reload retriever
+# --- Reload retriever (clears FAISS/model caches) -------------------------
+
 @router.post("/reload_index")
 def reload_index():
-    clear_caches()
+    _clear_caches_lazy()
     return {"status": "Caches cleared and ready for reload."}
-
