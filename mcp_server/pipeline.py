@@ -11,6 +11,7 @@ from agent.llm_wrapper import query_llm
 from agent.prompt_formatter import format_prompt
 from agent.tool_call_parser import extract_tool_call, normalize_actions
 from mcp_server.tool_dispatcher import handle_tool_call_async
+from retrieval.hierarchy import expand_requirement_ids, looks_like_parent
 
 # Safety limits so the follow-up prompt can't explode
 MAX_ACTIONS = 6
@@ -113,24 +114,41 @@ def _normalize_get_action(action: Dict[str, Any]) -> Dict[str, Any]:
     if (action or {}).get("tool_name") != "get":
         return action
 
-    tin = (action.get("tool_input") or {}) if isinstance(action.get("tool_input"), dict) else {}
+    tin = action.get("tool_input") or {}
+    if not isinstance(tin, dict):
+        return action
+
     id_val = tin.get("id")
     ids_val = tin.get("ids")
 
-    found: List[str] = []
-    if isinstance(ids_val, list):
-        for x in ids_val:
-            if isinstance(x, str):
-                found.extend(_extract_pci_ids(x))
-    elif isinstance(ids_val, str):
-        found.extend(_extract_pci_ids(ids_val))
-
+    # Prefer a single id if provided, else first of ids
+    rid = None
     if isinstance(id_val, str):
-        found.extend(_extract_pci_ids(id_val))
-    elif isinstance(id_val, list):
-        for x in id_val:
-            if isinstance(x, str):
-                found.extend(_extract_pci_ids(x))
+        rid = id_val.strip()
+    elif isinstance(ids_val, str):
+        rid = ids_val.strip()
+    elif isinstance(id_val, list) and id_val:
+        rid = id_val[0].strip()
+    elif isinstance(ids_val, list) and ids_val:
+        rid = ids_val[0].strip()
+
+    if not rid:
+        return action  # nothing to expand
+
+    try:
+        if looks_like_parent(rid):
+            expanded = expand_requirement_ids(rid, include_root=True)
+            if expanded:
+                action["tool_input"] = {"ids": expanded[:50]}  # cap for safety
+            else:
+                action["tool_input"] = {"id": rid}
+        else:
+            # Could expand children of sub-sections too, but keep as-is for now
+            action["tool_input"] = {"id": rid}
+    except Exception:
+        action["tool_input"] = {"id": rid}
+
+    return action
 
     # de-dup, preserve order
     seen = set()
