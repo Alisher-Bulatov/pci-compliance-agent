@@ -23,7 +23,7 @@ async def query_llm(
         "model": LLM_MODEL,
         "prompt": prompt,
         "stream": stream,
-        "options": {"temperature": 0.3, "num_predict": 400},
+        "options": {"temperature": 0.3, "num_predict": 2048},
     }
 
     if not stream:
