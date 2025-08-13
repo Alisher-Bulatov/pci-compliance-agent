@@ -151,7 +151,7 @@ export default function App() {
   const header = useMemo(
     () => (
       <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #1b2438" }}>
-        <div style={{ fontWeight: 700 }}>PCI DSS Compliance Agent (Mock Chat)</div>
+        <div style={{ fontWeight: 700 }}>PCI DSS Compliance Agent</div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>Backend: {API_BASE}</div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <label style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
